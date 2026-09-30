@@ -4,7 +4,7 @@ A fault-tolerant distributed key generation runtime for studying how DKG behaves
 
 This project focuses on the distributed runtime around a DKG ceremony: explicit participant state, message delivery semantics, durable recovery, and reproducible failure experiments. Cryptographic operations are isolated behind an adapter so runtime behavior can be developed independently.
 
-> **Status:** Initial project contract. M0 is planned and has not yet been implemented. Every behavior described as a target below is planned until its milestone tests or experiments have actually passed. The initial implementation will use deterministic mock cryptography and makes no cryptographic security claim.
+> **Status:** M0 code and a multi-process integration test are present, but M0 is not verified yet. The test has not run because this workspace has no Go toolchain. M1–M5 remain planned. Every behavior described as a target remains unverified until its milestone tests or experiments pass. The implementation uses deterministic mock cryptography and makes no cryptographic security claim.
 
 ## Problem
 
@@ -47,7 +47,7 @@ These are target outcomes; rows remain planned until covered by passing tests or
 
 | Milestone | Scope | Status |
 |---|---|---|
-| M0 — Baseline Runtime | Go module, participant processes, controller, message model, transport abstraction, explicit state machine, deterministic normal run | Planned |
+| M0 — Baseline Runtime | Go module, participant processes, controller, message model, transport abstraction, explicit state machine, deterministic normal run | Implemented; verification pending |
 | M1 — Message Semantics | Stable message IDs, session/epoch/round/phase validation, deduplication, idempotent application, stale rejection | Planned |
 | M2 — Crash Recovery | WAL or equivalent, replay, process restart, resume | Planned |
 | M3 — Fault Injection | Deterministic delay, drop, duplicate, crash/restart, and partition schedules | Planned |
@@ -69,6 +69,7 @@ The initial runtime uses deterministic mock cryptography. It is useful for testi
 
 ```sh
 go test ./...
+go run ./cmd/dkgctl run --participants 4 --threshold 3
 ```
 
 Milestone-specific implementation and exit criteria are tracked in [`docs/implementation-plan.md`](docs/implementation-plan.md). Experiment procedures and result fields are in [`docs/experiments.md`](docs/experiments.md). No benchmark or experiment result will be reported here until it has been run and captured.

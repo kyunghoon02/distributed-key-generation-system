@@ -37,4 +37,4 @@ Healing the E5 partition and observing recovery is a separate optional run and m
 
 ## Results log
 
-No measured experiment results have been recorded yet.
+The E0 integration test is implemented but has not been executed. No measured experiment results have been recorded yet.

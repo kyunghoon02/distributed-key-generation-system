@@ -4,13 +4,13 @@ Work one milestone at a time. A milestone is complete only when its exit criteri
 
 ## M0 — Baseline Runtime
 
-- [ ] Initialize Go module.
-- [ ] Define participant, session, and message types.
-- [ ] Define transport abstraction.
-- [ ] Implement explicit protocol state machine.
-- [ ] Implement deterministic mock crypto adapter.
-- [ ] Implement participant process and controller/CLI.
-- [ ] Add deterministic normal integration test with multiple participant processes.
+- [x] Initialize Go module.
+- [x] Define participant, session, and message types.
+- [x] Define transport abstraction.
+- [x] Implement explicit protocol state machine.
+- [x] Implement deterministic mock crypto adapter.
+- [x] Implement participant process and controller/CLI.
+- [x] Add deterministic normal integration test with multiple participant processes.
 - [ ] Pass M0 exit criteria: participants communicate, normal ceremony reaches terminal success, transitions are explicit and testable.
 - [ ] Record executed test evidence and update README status.
 

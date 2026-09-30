@@ -1,0 +1,183 @@
+package protocol
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"sync"
+
+	"github.com/kyunghoon02/distributed-key-generation-system/internal/cryptoadapter"
+)
+
+var (
+	ErrInvalidConfig = errors.New("invalid ceremony config")
+	ErrInvalidPhase  = errors.New("invalid protocol phase")
+	ErrInvalidMessage = errors.New("invalid protocol message")
+	ErrNotReady      = errors.New("participant is not ready to finalize")
+)
+
+type Status struct {
+	ParticipantID string `json:"participant_id"`
+	SessionID     string `json:"session_id,omitempty"`
+	Phase         Phase  `json:"phase"`
+	Received      int    `json:"received"`
+	Expected      int    `json:"expected"`
+	Threshold     int    `json:"threshold"`
+	Transitions   []Phase `json:"transitions"`
+}
+
+type Machine struct {
+	mu           sync.Mutex
+	id           string
+	crypto       cryptoadapter.Adapter
+	config       Config
+	phase        Phase
+	contributions map[string]string
+	transitions  []Phase
+}
+
+func NewMachine(participantID string, adapter cryptoadapter.Adapter) *Machine {
+	return &Machine{
+		id:            participantID,
+		crypto:        adapter,
+		phase:         PhaseInit,
+		contributions: make(map[string]string),
+		transitions:   []Phase{PhaseInit},
+	}
+}
+
+func (m *Machine) Begin(config Config) ([]Message, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.phase != PhaseInit {
+		return nil, fmt.Errorf("begin from %s: %w", m.phase, ErrInvalidPhase)
+	}
+	if err := validateConfig(config, m.id); err != nil {
+		return nil, err
+	}
+	contribution, err := m.crypto.CreateContribution(config.SessionID, m.id)
+	if err != nil {
+		return nil, fmt.Errorf("create mock contribution: %w", err)
+	}
+	m.config = config
+	m.contributions[m.id] = contribution
+	if err := m.transition(PhaseDeal); err != nil {
+		return nil, err
+	}
+	if err := m.transition(PhaseShareExchange); err != nil {
+		return nil, err
+	}
+
+	outbound := make([]Message, 0, len(config.Participants)-1)
+	for _, peerID := range config.Participants {
+		if peerID == m.id {
+			continue
+		}
+		outbound = append(outbound, Message{
+			SessionID: config.SessionID,
+			Epoch:     config.Epoch,
+			Round:     config.Round,
+			Phase:     PhaseShareExchange,
+			From:      m.id,
+			To:        peerID,
+			Payload:   contribution,
+		})
+	}
+	if len(m.contributions) == len(config.Participants) {
+		if err := m.transition(PhaseVerify); err != nil {
+			return nil, err
+		}
+	}
+	return outbound, nil
+}
+
+func (m *Machine) ReceiveShare(message Message) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.phase != PhaseShareExchange {
+		return fmt.Errorf("receive share in %s: %w", m.phase, ErrInvalidPhase)
+	}
+	if message.SessionID != m.config.SessionID || message.Epoch != m.config.Epoch ||
+		message.Round != m.config.Round || message.Phase != PhaseShareExchange ||
+		message.To != m.id || message.From == m.id || !slices.Contains(m.config.Participants, message.From) {
+		return ErrInvalidMessage
+	}
+	// M0 records one mock contribution per sender. Stable message identity,
+	// duplicate counters, and stale-message experiments are introduced in M1.
+	m.contributions[message.From] = message.Payload
+	if len(m.contributions) == len(m.config.Participants) {
+		return m.transition(PhaseVerify)
+	}
+	return nil
+}
+
+func (m *Machine) Finalize() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.phase != PhaseVerify {
+		return fmt.Errorf("finalize from %s: %w", m.phase, ErrNotReady)
+	}
+	if len(m.contributions) < m.config.Threshold {
+		return fmt.Errorf("have %d contributions, need %d: %w", len(m.contributions), m.config.Threshold, ErrNotReady)
+	}
+	for _, participantID := range m.config.Participants {
+		contribution, ok := m.contributions[participantID]
+		if !ok || !m.crypto.VerifyContribution(m.config.SessionID, participantID, contribution) {
+			return fmt.Errorf("invalid contribution from %q: %w", participantID, ErrInvalidMessage)
+		}
+	}
+	return m.transition(PhaseFinalize)
+}
+
+func (m *Machine) Status() Status {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return Status{
+		ParticipantID: m.id,
+		SessionID:     m.config.SessionID,
+		Phase:         m.phase,
+		Received:      len(m.contributions),
+		Expected:      len(m.config.Participants),
+		Threshold:     m.config.Threshold,
+		Transitions:   append([]Phase(nil), m.transitions...),
+	}
+}
+
+func (m *Machine) transition(next Phase) error {
+	allowed := map[Phase]Phase{
+		PhaseInit:          PhaseDeal,
+		PhaseDeal:          PhaseShareExchange,
+		PhaseShareExchange: PhaseVerify,
+		PhaseVerify:        PhaseFinalize,
+	}
+	if allowed[m.phase] != next {
+		return fmt.Errorf("%s -> %s: %w", m.phase, next, ErrInvalidPhase)
+	}
+	m.phase = next
+	m.transitions = append(m.transitions, next)
+	return nil
+}
+
+func validateConfig(config Config, participantID string) error {
+	if config.SessionID == "" || len(config.Participants) == 0 || config.Threshold < 1 || config.Threshold > len(config.Participants) {
+		return ErrInvalidConfig
+	}
+	if !slices.Contains(config.Participants, participantID) {
+		return fmt.Errorf("participant %q is not a member: %w", participantID, ErrInvalidConfig)
+	}
+	seen := make(map[string]struct{}, len(config.Participants))
+	for _, id := range config.Participants {
+		if id == "" {
+			return ErrInvalidConfig
+		}
+		if _, exists := seen[id]; exists {
+			return fmt.Errorf("duplicate participant %q: %w", id, ErrInvalidConfig)
+		}
+		seen[id] = struct{}{}
+	}
+	return nil
+}
