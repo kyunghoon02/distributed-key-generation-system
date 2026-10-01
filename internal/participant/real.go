@@ -15,8 +15,9 @@ import (
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/cryptoadapter"
 )
 
-// RealServer serializes access to a memory-only Kyber DKG participant. It
-// never exposes private scalar values or the final private signing share.
+// RealServer serializes access to a memory-only Kyber DKG participant. Its
+// final result API omits the private DKG share. It relays protocol packets,
+// whose justification payloads may contain share material.
 type RealServer struct {
 	mu      sync.Mutex
 	node    *cryptoadapter.KyberParticipant
