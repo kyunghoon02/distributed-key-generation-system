@@ -50,10 +50,12 @@ func main() {
 		err = runRealParticipant(os.Args[2:])
 	case len(os.Args) > 1 && os.Args[1] == "real-run":
 		err = runRealProcessExperiment(os.Args[2:])
+	case len(os.Args) > 1 && os.Args[1] == "real-p2p-run":
+		err = runRealPeer(os.Args[2:])
 	case len(os.Args) > 1 && os.Args[1] == "real-ceremony":
 		err = runRealCeremonyCommand(os.Args[2:])
 	default:
-		fmt.Fprintln(os.Stderr, "usage: dkgctl run [--participants N] [--threshold T] | experiment --scenario E0..E6 | real-run --scenario E0..E6 | real-ceremony [--journal PATH] | real-experiment --scenario E0,E1,E2,E4,E5,E6")
+		fmt.Fprintln(os.Stderr, "usage: dkgctl run [--participants N] [--threshold T] | experiment --scenario E0..E6 | real-run --scenario E0..E6 | real-p2p-run | real-ceremony [--journal PATH] | real-experiment --scenario E0,E1,E2,E4,E5,E6")
 		os.Exit(2)
 	}
 	if err != nil {

@@ -164,6 +164,10 @@ func runRealProcessExperiment(args []string) error {
 }
 
 func startRealProcessNodes() ([]realexperiment.Node, []participantProcess, error) {
+	return startRealProcessNodesWithMode(false)
+}
+
+func startRealProcessNodesWithMode(peerMode bool) ([]realexperiment.Node, []participantProcess, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return nil, nil, err
@@ -182,8 +186,12 @@ func startRealProcessNodes() ([]realexperiment.Node, []participantProcess, error
 			os.RemoveAll(credentials.dir)
 			return nil, nil, err
 		}
-		command := exec.Command(executable, "real-participant", "--id", id, "--index", fmt.Sprint(i), "--listen", address,
-			"--tls-cert", credentials.serverCert[i], "--tls-key", credentials.serverKey[i], "--tls-client-ca", credentials.caCert)
+		arguments := []string{"real-participant", "--id", id, "--index", fmt.Sprint(i), "--listen", address,
+			"--tls-cert", credentials.serverCert[i], "--tls-key", credentials.serverKey[i], "--tls-client-ca", credentials.caCert}
+		if peerMode {
+			arguments = append(arguments, "--peer-mode")
+		}
+		command := exec.Command(executable, arguments...)
 		command.Stdout, command.Stderr = os.Stderr, os.Stderr
 		if err := command.Start(); err != nil {
 			stopProcesses(processes)

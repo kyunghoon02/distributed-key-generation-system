@@ -1,6 +1,6 @@
 # Architecture
 
-This document separates the code that runs today from the proposed end state. Current evidence is local: four participant processes, a 3-of-4 threshold, and the E0–E6 fault schedules. See [experiment records](experiments.md) for observed outcomes.
+This document separates the code that runs today from the proposed end state. Current evidence is local: four participant processes, a 3-of-4 threshold, the E0–E6 controller fault schedules, and a direct peer E0 ceremony. See [experiment records](experiments.md) for recorded fault outcomes.
 
 ## Current implementation
 
@@ -20,11 +20,21 @@ This document separates the code that runs today from the proposed end state. Cu
                                                                |
                                                controller decision journal
                                                (nonce hashes, status only)
+
+            real-p2p-run (local E0 path)
+                 |
+           setup / start / public result
+                 |
+          p1 <----> p2
+          |  \      / |
+          |   \    /  |       direct mutual TLS TCP + JSON packets
+          |    \  /   |
+          p3 <----> p4
 ```
 
-The controller launches local processes, collects their public identities, chooses delivery order, forwards packets, and collects terminal results. The final private DKG shares are not returned through the result API. The controller does see relayed protocol packets; justification packets can contain share material. The real packet path is a controller relay for local experiments; participant-to-participant networking is not implemented.
+For `real-run` and `real-ceremony`, the controller launches local processes, collects their public identities, chooses delivery order, forwards packets, and collects terminal results. The final private DKG shares are not returned through the result API. The controller does see relayed protocol packets; justification packets can contain share material. `real-p2p-run` is a separate local E0 path: the controller provides identities, nonce, and peer addresses and starts each node; the nodes exchange packets directly over mutual TLS TCP connections and the controller reads public results.
 
-This relay makes fault injection repeatable, but it is one availability dependency and one place that can withhold or reorder every packet. Packet signatures stop undetected modification of signed content; they do not guarantee delivery. Moving packet exchange to peers removes that relay dependency, while still requiring authenticated membership and consistent broadcast behavior.
+The relay makes fault injection repeatable, but it is one availability dependency and one place that can withhold or reorder every packet. Packet signatures stop undetected modification of signed content; they do not guarantee delivery. The direct path removes that relay from its E0 data path, while still requiring stronger failure handling and consistent broadcast behavior before it can replace the supervised path.
 
 | Code | Responsibility |
 |---|---|
@@ -54,6 +64,12 @@ This relay makes fault injection repeatable, but it is one availability dependen
 5. `real-run` applies E0–E6 delivery/process schedules. E4 demonstrates that three responsive participants can finalize with one group public key; E5's 2:2 split finalizes nobody. E6 is an injected hold followed by terminal-state rejection, not an autonomous network timeout measurement.
 6. `real-ceremony` is the normal supervised command. It currently requires **all four** participants to finalize successfully. On a detected RPC/process failure, it stops the local processes, records `aborted`, and starts a **new** attempt with fresh identities and nonce. Its synced journal contains attempt numbers, nonce hashes, and decisions, never private DKG state. E3 uses this same supervisor and tests an old signed deal against the new session.
 
+### Direct peer E0 flow
+
+1. `real-p2p-run` starts four loopback participants with certificates valid for server and peer client authentication. The controller collects public identities and configures the same 3-of-4 roster, nonce, and distinct peer addresses on every node.
+2. Each node generates its own deal bundle, sends it directly to the other three nodes, waits for all three deals, processes them, then directly sends and receives response bundles. Peer RPC accepts only `real-accept`; the certificate identity must match the packet sender and configured roster. The controller certificate cannot invoke packet or phase RPC in peer mode.
+3. Nodes finalize locally. The controller polls status and compares only public group keys. The path currently requires all four participants and a complaint-free run; a timeout or need for justifications aborts it. It has no peer-mode crash recovery, quorum progress under participant loss, or multi-host validation.
+
 Mock and real participants expose separate bounded-label Prometheus metrics and structured JSON request logs. The real process accepts externally provided TLS files, but multi-host certificate provisioning and networking have not been validated end to end. An abrupt controller crash may leave old local child processes running. No distributed threshold signing or durable custody of completed real private shares exists yet.
 
 ## Proposed final architecture
@@ -79,7 +95,7 @@ flowchart TB
     C --> J[Durable decisions and public-key registry]
 ```
 
-**DKG path:** The coordinator fixes an authenticated roster and unique session/epoch and starts the ceremony. Participants then exchange DKG packets directly with peers over authenticated channels, finalize under the selected protocol's qualification rule, and retain their private shares under a defined custody and recovery policy. The coordinator records public results and ceremony decisions; it is not on the DKG packet data path. A failed ceremony is fenced and restarted with a new nonce unless the chosen library supports a verified safe checkpoint format. This split resembles drand's [coordinator setup and node-driven DKG](https://docs.drand.love/docs/specification/), but the current repository has not implemented the peer transport.
+**DKG path:** The coordinator fixes an authenticated roster and unique session/epoch and starts the ceremony. Participants then exchange DKG packets directly with peers over authenticated channels, finalize under the selected protocol's qualification rule, and retain their private shares under a defined custody and recovery policy. The coordinator records public results and ceremony decisions; it is not on the DKG packet data path. A failed ceremony is fenced and restarted with a new nonce unless the chosen library supports a verified safe checkpoint format. The local E0 direct path demonstrates packet transport, but the complete failure and recovery behavior here remains a target. This split resembles drand's [coordinator setup and node-driven DKG](https://docs.drand.love/docs/specification/).
 
 **Signing path:** A sign request binds a key/epoch, message digest, and request ID. At least three authorized participants use their own shares to produce signing contributions. A combiner assembles and verifies one signature against the DKG group public key. Two participants cannot produce a valid signature; no component reconstructs or stores the complete private key. Replay, duplicate requests, participant loss, and timeout must have explicit terminal behavior.
 

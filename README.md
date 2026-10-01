@@ -4,7 +4,7 @@ A fault-tolerant distributed key generation runtime for studying how DKG behaves
 
 This project focuses on the distributed runtime around a DKG ceremony: explicit participant state, message delivery semantics, durable recovery, and reproducible failure experiments. Cryptographic operations are isolated behind an adapter so runtime behavior can be developed independently.
 
-> **Status:** M0–M4 mock-runtime tests, M5 real-DKG fault experiments, and M6 local ceremony supervision passed on 2026-10-01. Real DKG uses drand/kyber `v1.3.2` in four separate local processes over mutually authenticated TLS. Real private state is memory-only: recovery starts a new ceremony, never resumes the interrupted one. Multi-host operation, distributed threshold signing, and production security are not established.
+> **Status:** M0–M4 mock-runtime tests, M5 real-DKG fault experiments, M6 local ceremony supervision, and a local 4-node direct packet exchange passed on 2026-10-01. Real DKG uses drand/kyber `v1.3.2` in four separate local processes over mutually authenticated TLS. The direct path currently covers a complaint-free E0 ceremony on loopback; the fault experiments and supervised recovery still use the controller relay. Real private state is memory-only. Multi-host operation, distributed threshold signing, and production security are not established.
 
 ## Problem
 
@@ -27,7 +27,7 @@ mock: TCP → message validation → explicit state machine → mock adapter →
 real: mutual TLS → signed packet validation → Kyber DKG → in-memory share → metrics
 ```
 
-The controller coordinates separate local participant processes and currently relays all DKG packets. The mock path has an explicit state machine, deterministic mock crypto, and a per-participant WAL for same-session process recovery. The real path wraps drand/kyber's deal, response, and justification rounds behind a crypto adapter. Its secret state stays in process memory. The real process runner creates a short-lived local certificate authority and separate server and controller certificates; every RPC uses mutual TLS. Both experiment runners inject local delivery and process faults. Mock and real participants expose separate Prometheus metrics and emit structured request logs. The [proposed final architecture](docs/architecture.md#proposed-final-architecture) moves DKG packet exchange to authenticated peer connections and keeps the coordinator on the control path.
+The controller coordinates separate local participant processes. `real-run` and `real-ceremony` relay DKG packets through the controller; `real-p2p-run` configures the roster and then nodes send signed deal and response packets directly to one another over mutual TLS. The mock path has an explicit state machine, deterministic mock crypto, and a per-participant WAL for same-session process recovery. The real path wraps drand/kyber's rounds behind a crypto adapter; its secret state stays in process memory. The local process runner creates a short-lived certificate authority and controller and participant certificates. Fault schedules still run on the controller relay path. Mock and real participants expose separate Prometheus metrics and structured request logs. The [proposed final architecture](docs/architecture.md#proposed-final-architecture) extends direct exchange with failure handling, multi-host operation, and signing.
 
 ## Failure matrix
 
@@ -53,6 +53,7 @@ These are target outcomes. The [experiment records](docs/experiments.md) keep mo
 | M4 — Observability and Evidence | Structured logs, Prometheus metrics, machine-readable experiment results, regression tests | Verified for local mock runtime |
 | M5 — Real DKG Integration | Select drand/kyber; run signed packets with encrypted deal shares through four local processes and E0–E6 faults | Verified locally, with documented deployment and recovery limits |
 | M6 — Real Ceremony Supervision | Retry failed local process ceremonies with fresh identities and nonce; record decisions; authenticate RPC; verify share threshold in a test | Verified locally; multi-host deployment and distributed signing remain future work |
+| M7 — Direct Peer Packet Exchange | Four local nodes send DKG packets to one another over mutual TLS TCP | E0 verified; direct-path fault and recovery behavior remains open |
 
 ## Non-goals
 
@@ -73,12 +74,15 @@ go run ./cmd/dkgctl run --participants 4 --threshold 3
 go run ./cmd/dkgctl experiment --scenario E5 --format text --output results/E5.json
 go run ./cmd/dkgctl real-run --scenario E0
 go run ./cmd/dkgctl real-run --scenario E4
+go run ./cmd/dkgctl real-p2p-run
 go run ./cmd/dkgctl real-ceremony --journal .dkgctl/real-ceremony.jsonl
 ```
 
 `dkgctl participant --id p1 --listen 127.0.0.1:9001 --state-file ./state/p1.wal` keeps one participant's state across process restarts when launched again with the same ID and state file. The normal `run` command uses temporary state files and removes them when it exits.
 
 `real-ceremony` runs a normal 3-of-4 ceremony. On a detected participant RPC or process failure it stops all four local processes, records an abort, and retries with new identities and nonce (at most two attempts by default). Its controller journal contains only nonce hashes and decisions; Kyber private state is never replayed. The E3 fault experiment uses the same supervisor and verifies that an old signed deal is rejected by the fresh session. An interrupted controller run is marked aborted on its next start; orphaned child processes from an abrupt controller crash are not currently reaped across controller restarts.
+
+`real-p2p-run` starts four local participants, gives each the same roster and peer addresses, and starts each node's own DKG loop. Nodes exchange packets directly using TCP/TLS + JSON; the controller only configures, starts, and reads public results. The peer mode accepts packet RPC only from a roster member whose client certificate identity matches the signed packet sender. It waits for all three peers in each round and currently aborts if the ceremony needs justifications. This command has no crash recovery or fault schedule yet.
 
 Add `--metrics-listen 127.0.0.1:9002` to a mock or real participant command to expose `/metrics`; participant requests are logged as JSON to stderr. Real participant RPC requires `--tls-cert`, `--tls-key`, and `--tls-client-ca`. Real metrics count bounded RPC operations, results, packet outcomes, and phase; they carry no session ID or participant-provided label. The supervisor generates local certificates automatically. Externally supplied certificates and multi-host networking have not been exercised end to end.
 

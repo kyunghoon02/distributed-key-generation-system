@@ -71,14 +71,14 @@ func newLocalRealTLSCredentials() (credentials realTLSCredentials, err error) {
 		id := fmt.Sprintf("p%d", i+1)
 		credentials.serverCert[i] = filepath.Join(credentials.dir, id+".pem")
 		credentials.serverKey[i] = filepath.Join(credentials.dir, id+"-key.pem")
-		if err = writeRealTLSLeaf(credentials.serverCert[i], credentials.serverKey[i], id, x509.ExtKeyUsageServerAuth, net.ParseIP("127.0.0.1"), ca, caKey); err != nil {
+		if err = writeRealTLSLeaf(credentials.serverCert[i], credentials.serverKey[i], id, x509.ExtKeyUsageServerAuth, net.ParseIP("127.0.0.1"), ca, caKey, x509.ExtKeyUsageClientAuth); err != nil {
 			return credentials, err
 		}
 	}
 	return credentials, nil
 }
 
-func writeRealTLSLeaf(certPath, keyPath, name string, usage x509.ExtKeyUsage, ip net.IP, ca *x509.Certificate, caKey *ecdsa.PrivateKey) error {
+func writeRealTLSLeaf(certPath, keyPath, name string, usage x509.ExtKeyUsage, ip net.IP, ca *x509.Certificate, caKey *ecdsa.PrivateKey, extraUsages ...x509.ExtKeyUsage) error {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return err
@@ -90,7 +90,7 @@ func writeRealTLSLeaf(certPath, keyPath, name string, usage x509.ExtKeyUsage, ip
 	now := time.Now()
 	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: name},
 		NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
-		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{usage},
+		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: append([]x509.ExtKeyUsage{usage}, extraUsages...),
 		DNSNames: []string{name}}
 	if ip != nil {
 		template.IPAddresses = []net.IP{ip}

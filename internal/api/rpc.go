@@ -9,6 +9,7 @@ type RealConfig struct {
 	Identities []cryptoadapter.KyberIdentity `json:"identities"`
 	Threshold  int                           `json:"threshold"`
 	Nonce      []byte                        `json:"nonce"`
+	Peers      map[string]string             `json:"peers,omitempty"`
 }
 
 type Request struct {
@@ -29,4 +30,6 @@ type Response struct {
 	RealResult    *cryptoadapter.KyberPublicResult `json:"real_result,omitempty"`
 	RealStage     string                           `json:"real_stage,omitempty"`
 	RealDuplicate bool                             `json:"real_duplicate,omitempty"`
+	PeerRunning   bool                             `json:"peer_running,omitempty"`
+	PeerError     string                           `json:"peer_error,omitempty"`
 }

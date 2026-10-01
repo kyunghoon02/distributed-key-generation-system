@@ -295,6 +295,19 @@ func (p *KyberParticipant) ProcessJustifications() error {
 
 func (p *KyberParticipant) Stage() string { return p.stage }
 
+func (p *KyberParticipant) Received(kind string) int {
+	switch kind {
+	case "deal":
+		return len(p.deals)
+	case "response":
+		return len(p.responses)
+	case "justification":
+		return len(p.justifications)
+	default:
+		return 0
+	}
+}
+
 func (p *KyberParticipant) Timeout() error {
 	if p.stage == "TIMED_OUT" {
 		return nil

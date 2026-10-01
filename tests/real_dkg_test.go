@@ -118,3 +118,37 @@ func TestRealCeremonyJournalAndFreshAttempt(t *testing.T) {
 		t.Fatalf("journal contains secret-like fields: %s", contents)
 	}
 }
+
+func TestRealPeerCeremony(t *testing.T) {
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(t.TempDir(), "dkgctl")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/dkgctl")
+	build.Dir = root
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, output)
+	}
+	command := exec.Command(binary, "real-p2p-run")
+	command.Dir = root
+	output, err := command.Output()
+	if err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			t.Fatalf("real-p2p-run: %v\n%s", err, exit.Stderr)
+		}
+		t.Fatal(err)
+	}
+	var result struct {
+		Topology           string                             `json:"topology"`
+		FinalizedCount     int                                `json:"finalized_count"`
+		GroupKeyAgreement  string                             `json:"group_key_agreement"`
+		ParticipantResults []realexperiment.ParticipantResult `json:"participant_results"`
+	}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Topology != "participant-to-participant" || result.FinalizedCount != 4 || result.GroupKeyAgreement != "consistent" || len(result.ParticipantResults) != 4 {
+		t.Fatalf("unexpected peer result: %+v", result)
+	}
+}

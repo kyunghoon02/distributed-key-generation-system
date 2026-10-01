@@ -80,3 +80,16 @@ Real same-session DKG state restoration, authenticated remote RPC, key custody, 
 M6 remains a local runtime milestone. Test-only secret reconstruction does not implement distributed threshold signing. The controller journal does not restore Kyber private state, and an abrupt controller crash may leave old local child processes running until cleaned up. Multi-host deployment, certificate lifecycle, key custody, distributed threshold signing, and security review remain future work.
 
 M6 verification on 2026-10-01 (Go 1.25.0, darwin/arm64): `go test ./...`, `go test -race ./...`, `go vet ./...`, `go mod verify`, and three consecutive `go test` runs of the process integration and crypto-adapter packages passed. The TLS test accepts the controller certificate and rejects an anonymous client and a mismatched server name. The process test covers E3's abort, fresh-process retry, fresh nonce, and old signed deal rejection; a separate test recovers an interrupted controller journal. Revision `b5b7da0f41541461e5a131fe5f604ae84bb85171` was then built cleanly and used for the [M6 local result files](experiments.md#m6-mutual-tls-rerun). These are local functional checks, not a production security assessment.
+
+## M7 — Direct Peer Packet Exchange
+
+- [x] Add a local 4-node direct TCP/TLS packet path with certificate identity bound to the configured roster and signed sender.
+- [x] Keep the controller on setup, start, status, and public-result RPC for the direct path.
+- [x] Verify a complaint-free E0 ceremony finalizes all four nodes with one group public key.
+- [ ] Implement complaint/justification completion and participant-loss behavior on the direct path.
+- [ ] Add peer-mode abort, fencing, and fresh-session recovery to the supervised normal command.
+- [ ] Validate multi-host addresses, certificate provisioning, and network faults.
+
+`real-p2p-run` is a local proof of direct packet exchange. It waits for all peers in each round, retries sends within a bounded deadline, and aborts on a timeout or justification requirement. The E0–E6 experiments and `real-ceremony` still use the controller relay; direct path fault tolerance remains unverified.
+
+M7 local verification on 2026-10-01: `go test ./...`, `go test -race ./...`, `go vet ./...`, and `git diff --check` passed. The peer process integration test passed three consecutive runs; each starts four separate processes and checks four finalizations and group-key agreement. A TLS authorization test rejects controller packet/phase RPC and peer access to control RPC, and checks that the certificate identity cannot impersonate a different packet sender. One direct CLI run also finalized all four local participants with the same group public key. These checks do not establish behavior under packet loss, complaints, process crashes, or multi-host networking.

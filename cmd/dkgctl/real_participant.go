@@ -22,6 +22,7 @@ func runRealParticipant(args []string) error {
 	tlsCert := flags.String("tls-cert", "", "server certificate PEM")
 	tlsKey := flags.String("tls-key", "", "server private key PEM")
 	clientCA := flags.String("tls-client-ca", "", "trusted controller CA PEM")
+	peerMode := flags.Bool("peer-mode", false, "permit authenticated roster peers to deliver DKG packets")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -36,7 +37,7 @@ func runRealParticipant(args []string) error {
 			return err
 		}
 	}
-	serverTLS, err := loadRealServerTLSConfig(*tlsCert, *tlsKey, *clientCA)
+	serverTLS, err := loadRealServerTLSConfigWithPeers(*tlsCert, *tlsKey, *clientCA, *peerMode)
 	if err != nil {
 		return err
 	}
@@ -50,6 +51,11 @@ func runRealParticipant(args []string) error {
 	server, err := participant.NewRealServer(*id, uint32(*index), logger)
 	if err != nil {
 		return err
+	}
+	if *peerMode {
+		clientTLS := &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: serverTLS.ClientCAs,
+			Certificates: serverTLS.Certificates}
+		server.EnablePeerMode(clientTLS)
 	}
 	if *metricsAddress != "" {
 		metricsListener, err := net.Listen("tcp", *metricsAddress)
@@ -65,6 +71,10 @@ func runRealParticipant(args []string) error {
 }
 
 func loadRealServerTLSConfig(certPath, keyPath, caPath string) (*tls.Config, error) {
+	return loadRealServerTLSConfigWithPeers(certPath, keyPath, caPath, false)
+}
+
+func loadRealServerTLSConfigWithPeers(certPath, keyPath, caPath string, peerMode bool) (*tls.Config, error) {
 	certificate, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		return nil, err
@@ -81,7 +91,11 @@ func loadRealServerTLSConfig(certPath, keyPath, caPath string) (*tls.Config, err
 		Certificates: []tls.Certificate{certificate}, ClientCAs: clientRoots,
 		ClientAuth: tls.RequireAndVerifyClientCert,
 		VerifyConnection: func(state tls.ConnectionState) error {
-			if len(state.PeerCertificates) == 0 || state.PeerCertificates[0].Subject.CommonName != "dkg-controller" {
+			if len(state.PeerCertificates) == 0 {
+				return errors.New("missing DKG client identity")
+			}
+			name := state.PeerCertificates[0].Subject.CommonName
+			if name != "dkg-controller" && (!peerMode || (name != "p1" && name != "p2" && name != "p3" && name != "p4")) {
 				return errors.New("untrusted DKG controller identity")
 			}
 			return nil
