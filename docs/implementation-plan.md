@@ -18,11 +18,13 @@ M0 verification on 2026-10-01 (Go 1.24.4, darwin/arm64): `go test ./...` and `go
 
 ## M1 — Message Semantics
 
-- [ ] Add stable logical MessageID.
-- [ ] Validate session, epoch, round, phase, sender, recipient, and message identity before mutation.
-- [ ] Deduplicate logical messages and make application idempotent.
-- [ ] Reject stale messages without state mutation.
-- [ ] Test duplicate delivery, stale delivery, and zero duplicate transitions.
+- [x] Add stable logical MessageID.
+- [x] Validate session, epoch, round, phase, sender, recipient, and message identity before mutation.
+- [x] Deduplicate logical messages and make application idempotent.
+- [x] Reject stale messages without state mutation.
+- [x] Test duplicate delivery, stale delivery, and zero duplicate transitions.
+
+M1 verification on 2026-10-01 (Go 1.24.4, darwin/arm64): `go test ./...` and `go test -race ./...` passed. Protocol tests cover repeated SHARE delivery before and after phase changes, stale ceremony coordinates, invalid identity and payload, and unchanged state on rejection. A local TCP test covers duplicate and stale delivery through the participant server. These tests use mock contributions; deterministic fault schedules and experiment measurements remain M3–M4 work.
 
 ## M2 — Crash Recovery
 

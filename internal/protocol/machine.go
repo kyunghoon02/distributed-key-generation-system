@@ -13,6 +13,7 @@ var (
 	ErrInvalidConfig  = errors.New("invalid ceremony config")
 	ErrInvalidPhase   = errors.New("invalid protocol phase")
 	ErrInvalidMessage = errors.New("invalid protocol message")
+	ErrStaleMessage   = errors.New("stale protocol message")
 	ErrNotReady       = errors.New("participant is not ready to finalize")
 )
 
@@ -33,6 +34,7 @@ type Machine struct {
 	config        Config
 	phase         Phase
 	contributions map[string]string
+	applied       map[string]string
 	transitions   []Phase
 }
 
@@ -42,6 +44,7 @@ func NewMachine(participantID string, adapter cryptoadapter.Adapter) *Machine {
 		crypto:        adapter,
 		phase:         PhaseInit,
 		contributions: make(map[string]string),
+		applied:       make(map[string]string),
 		transitions:   []Phase{PhaseInit},
 	}
 }
@@ -61,6 +64,7 @@ func (m *Machine) Begin(config Config) ([]Message, error) {
 		return nil, fmt.Errorf("create mock contribution: %w", err)
 	}
 	m.config = config
+	m.config.Participants = slices.Clone(config.Participants)
 	m.contributions[m.id] = contribution
 	if err := m.transition(PhaseDeal); err != nil {
 		return nil, err
@@ -74,7 +78,7 @@ func (m *Machine) Begin(config Config) ([]Message, error) {
 		if peerID == m.id {
 			continue
 		}
-		outbound = append(outbound, Message{
+		message := Message{
 			SessionID: config.SessionID,
 			Epoch:     config.Epoch,
 			Round:     config.Round,
@@ -82,7 +86,9 @@ func (m *Machine) Begin(config Config) ([]Message, error) {
 			From:      m.id,
 			To:        peerID,
 			Payload:   contribution,
-		})
+		}
+		message.MessageID = message.LogicalID()
+		outbound = append(outbound, message)
 	}
 	if len(m.contributions) == len(config.Participants) {
 		if err := m.transition(PhaseVerify); err != nil {
@@ -96,16 +102,30 @@ func (m *Machine) ReceiveShare(message Message) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.phase != PhaseShareExchange {
+	if m.phase == PhaseInit {
 		return fmt.Errorf("receive share in %s: %w", m.phase, ErrInvalidPhase)
 	}
-	if message.SessionID != m.config.SessionID || message.Epoch != m.config.Epoch ||
-		message.Round != m.config.Round || message.Phase != PhaseShareExchange ||
-		message.To != m.id || message.From == m.id || !slices.Contains(m.config.Participants, message.From) {
+	if message.SessionID != m.config.SessionID || message.Epoch != m.config.Epoch || message.Round != m.config.Round {
+		return ErrStaleMessage
+	}
+	if message.Phase != PhaseShareExchange || message.To != m.id || message.From == m.id ||
+		!slices.Contains(m.config.Participants, message.From) || message.MessageID == "" ||
+		message.MessageID != message.LogicalID() {
 		return ErrInvalidMessage
 	}
-	// M0 records one mock contribution per sender. Stable message identity,
-	// duplicate counters, and stale-message experiments are introduced in M1.
+	if appliedPayload, ok := m.applied[message.MessageID]; ok {
+		if appliedPayload != message.Payload {
+			return ErrInvalidMessage
+		}
+		return nil
+	}
+	if m.phase != PhaseShareExchange {
+		return fmt.Errorf("receive share in %s: %w", m.phase, ErrStaleMessage)
+	}
+	if !m.crypto.VerifyContribution(m.config.SessionID, message.From, message.Payload) {
+		return ErrInvalidMessage
+	}
+	m.applied[message.MessageID] = message.Payload
 	m.contributions[message.From] = message.Payload
 	if len(m.contributions) == len(m.config.Participants) {
 		return m.transition(PhaseVerify)

@@ -4,7 +4,7 @@ A fault-tolerant distributed key generation runtime for studying how DKG behaves
 
 This project focuses on the distributed runtime around a DKG ceremony: explicit participant state, message delivery semantics, durable recovery, and reproducible failure experiments. Cryptographic operations are isolated behind an adapter so runtime behavior can be developed independently.
 
-> **Status:** M0 passed its normal-flow verification on 2026-10-01 with Go 1.24.4: `go test ./...`, `go test -race ./...`, and a four-participant CLI run. M1–M5 remain planned. Every behavior described as a target remains unverified until its milestone tests or experiments pass. The implementation uses deterministic mock cryptography and makes no cryptographic security claim.
+> **Status:** M0 normal flow and M1 mock SHARE message semantics passed their tests on 2026-10-01 with Go 1.24.4. M2–M5 remain planned. Fault-scheduled experiments remain unrun. The implementation uses deterministic mock cryptography and makes no cryptographic security claim.
 
 ## Problem
 
@@ -32,7 +32,7 @@ The first milestone is intentionally smaller: a controller coordinates separate 
 
 ## Failure matrix
 
-These are target outcomes; rows remain planned until covered by passing tests or recorded experiments.
+These are target outcomes. M1 tests cover duplicate and stale mock SHARE delivery; fault-scheduled experiments remain planned.
 
 | Failure | Target |
 |---|---|
@@ -48,7 +48,7 @@ These are target outcomes; rows remain planned until covered by passing tests or
 | Milestone | Scope | Status |
 |---|---|---|
 | M0 — Baseline Runtime | Go module, participant processes, controller, message model, transport abstraction, explicit state machine, deterministic normal run | Verified for the normal flow |
-| M1 — Message Semantics | Stable message IDs, session/epoch/round/phase validation, deduplication, idempotent application, stale rejection | Planned |
+| M1 — Message Semantics | Stable message IDs, session/epoch/round/phase validation, deduplication, idempotent application, stale rejection | Verified for mock SHARE delivery |
 | M2 — Crash Recovery | WAL or equivalent, replay, process restart, resume | Planned |
 | M3 — Fault Injection | Deterministic delay, drop, duplicate, crash/restart, and partition schedules | Planned |
 | M4 — Observability and Evidence | Structured logs, Prometheus metrics, machine-readable experiment results, regression tests | Planned |

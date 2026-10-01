@@ -25,9 +25,9 @@ Record the following for every run:
 
 | ID | Scenario | Setup / fault | Expected invariant or behavior | Status |
 |---|---|---|---|---|
-| E0 | Normal run | 4 participants, threshold 3 | Completes; invalid transition count is 0 | Planned |
-| E1 | Duplicate delivery | Duplicate protocol messages | Duplicates observed; duplicate transition count is 0; ceremony remains valid | Planned |
-| E2 | Stale delivery | Delay a message until the receiver advances beyond its valid state | Reject stale message; current state unchanged | Planned |
+| E0 | Normal run | 4 participants, threshold 3 | Completes; invalid transition count is 0 | Normal-flow test passed; measurements pending |
+| E1 | Duplicate delivery | Duplicate protocol messages | Duplicates observed; duplicate transition count is 0; ceremony remains valid | Mock SHARE semantics tested; experiment pending |
+| E2 | Stale delivery | Delay a message until the receiver advances beyond its valid state | Reject stale message; current state unchanged | Mock SHARE semantics tested; experiment pending |
 | E3 | Crash during SHARE | Persist some SHARE state, crash, restart | Replay durable state; resume same session; no re-application; record recovery duration | Planned |
 | E4 | One unavailable participant | 4 participants, threshold 3; one unavailable | Follow selected DKG protocol's actual threshold and liveness rules | Planned |
 | E5 | Threshold-deficient partition | 4 participants, threshold 3; partition A,B | C,D | Neither side finalizes while partitioned | Planned |
@@ -37,4 +37,4 @@ Healing the E5 partition and observing recovery is a separate optional run and m
 
 ## Results log
 
-The E0 integration test is implemented but has not been executed. No measured experiment results have been recorded yet.
+On 2026-10-01, the E0 four-process normal-flow test and CLI run completed successfully. M1 unit and local TCP tests also passed for duplicate SHARE delivery and stale round rejection. These are test results, not completed E0–E2 experiment records: fault schedules and the required timing and counter fields have not been captured yet.
