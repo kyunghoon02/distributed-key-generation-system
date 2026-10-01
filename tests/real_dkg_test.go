@@ -2,8 +2,10 @@ package tests
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/realexperiment"
@@ -52,7 +54,7 @@ func TestRealDKGFourProcessFaultScenarios(t *testing.T) {
 					t.Fatalf("stale: %+v", result)
 				}
 			case "E3":
-				if result.FinalizedCount != 4 || result.RecoveryMode != "fresh_session_after_abort" || result.AbortedSessions != 1 || result.RestartedProcesses != 4 || result.AbortedNonceSHA256 == result.SessionNonceSHA256 || result.RecoveryDurationMS == nil {
+				if result.FinalizedCount != 4 || result.RecoveryMode != "fresh_session_after_abort" || result.AbortedSessions != 1 || result.RestartedProcesses != 4 || result.AbortedNonceSHA256 == result.SessionNonceSHA256 || result.RecoveryDurationMS == nil || result.StaleRejectedCount != 1 {
 					t.Fatalf("fresh-session recovery: %+v", result)
 				}
 			case "E4":
@@ -69,5 +71,50 @@ func TestRealDKGFourProcessFaultScenarios(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRealCeremonyJournalAndFreshAttempt(t *testing.T) {
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(t.TempDir(), "dkgctl")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/dkgctl")
+	build.Dir = root
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, output)
+	}
+	journal := filepath.Join(t.TempDir(), "ceremony.jsonl")
+	// A prior controller can die between durable STARTED and its decision.
+	priorHash := strings.Repeat("0", 64)
+	if err := os.WriteFile(journal, []byte(`{"attempt":1,"nonce_sha256":"`+priorHash+`","status":"started","at":"2026-10-01T00:00:00Z"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(binary, "real-ceremony", "--journal", journal)
+	command.Dir = root
+	output, err := command.Output()
+	if err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			t.Fatalf("real-ceremony: %v\n%s", err, exit.Stderr)
+		}
+		t.Fatal(err)
+	}
+	var result realexperiment.Result
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.FinalizedCount != 4 || result.RecoveryMode != "fresh_session_after_abort" || result.AbortedNonceSHA256 != priorHash || result.SessionNonceSHA256 == result.AbortedNonceSHA256 {
+		t.Fatalf("unexpected recovery result: %+v", result)
+	}
+	contents, err := os.ReadFile(journal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(contents), `"status":"started"`) != 2 || strings.Count(string(contents), `"status":"aborted"`) != 1 || strings.Count(string(contents), `"status":"finalized"`) != 1 {
+		t.Fatalf("journal transitions: %s", contents)
+	}
+	if strings.Contains(string(contents), "private") || strings.Contains(string(contents), "share") {
+		t.Fatalf("journal contains secret-like fields: %s", contents)
 	}
 }

@@ -23,9 +23,10 @@ import (
 )
 
 type participantProcess struct {
-	id      string
-	address string
-	command *exec.Cmd
+	id         string
+	address    string
+	command    *exec.Cmd
+	cleanupDir string
 }
 
 type runResult struct {
@@ -49,8 +50,10 @@ func main() {
 		err = runRealParticipant(os.Args[2:])
 	case len(os.Args) > 1 && os.Args[1] == "real-run":
 		err = runRealProcessExperiment(os.Args[2:])
+	case len(os.Args) > 1 && os.Args[1] == "real-ceremony":
+		err = runRealCeremonyCommand(os.Args[2:])
 	default:
-		fmt.Fprintln(os.Stderr, "usage: dkgctl run [--participants N] [--threshold T] | experiment --scenario E0..E6 | real-run --scenario E0..E6 | real-experiment --scenario E0,E1,E2,E4,E5,E6")
+		fmt.Fprintln(os.Stderr, "usage: dkgctl run [--participants N] [--threshold T] | experiment --scenario E0..E6 | real-run --scenario E0..E6 | real-ceremony [--journal PATH] | real-experiment --scenario E0,E1,E2,E4,E5,E6")
 		os.Exit(2)
 	}
 	if err != nil {
@@ -242,6 +245,9 @@ func stopProcesses(processes []participantProcess) {
 			_ = process.command.Process.Kill()
 			_ = process.command.Wait()
 			process.command.Process = nil
+		}
+		if process.cleanupDir != "" {
+			_ = os.RemoveAll(process.cleanupDir)
 		}
 	}
 }

@@ -34,6 +34,8 @@ type KyberParticipant struct {
 	stage          string
 }
 
+var ErrStaleSession = errors.New("stale DKG session")
+
 type KyberIdentity struct {
 	ID     string
 	Index  uint32
@@ -150,7 +152,7 @@ func (p *KyberParticipant) Accept(packet KyberPacket) (bool, error) {
 		return false, errors.New("DKG already terminal")
 	}
 	if !bytes.Equal(packet.SessionID, p.config.Nonce) {
-		return false, errors.New("stale DKG session")
+		return false, ErrStaleSession
 	}
 	if packet.Index == p.index || packet.From == p.id {
 		return false, errors.New("self-delivery is invalid")

@@ -4,7 +4,7 @@ A fault-tolerant distributed key generation runtime for studying how DKG behaves
 
 This project focuses on the distributed runtime around a DKG ceremony: explicit participant state, message delivery semantics, durable recovery, and reproducible failure experiments. Cryptographic operations are isolated behind an adapter so runtime behavior can be developed independently.
 
-> **Status:** M0–M4 mock-runtime tests and M5 local real-DKG experiments E0–E6 passed on 2026-10-01. Real DKG uses drand/kyber `v1.3.2` in four separate local processes. The real path has no same-session WAL recovery, remote transport security, or production security claim.
+> **Status:** M0–M4 mock-runtime tests, M5 real-DKG fault experiments, and M6 local ceremony supervision passed on 2026-10-01. Real DKG uses drand/kyber `v1.3.2` in four separate local processes over mutually authenticated TLS. Real private state is memory-only: recovery starts a new ceremony, never resumes the interrupted one. Multi-host operation, distributed threshold signing, and production security are not established.
 
 ## Problem
 
@@ -28,7 +28,7 @@ Network Transport → Message Validation → Protocol State Machine
                   → Crypto Adapter → Durable State → Metrics
 ```
 
-The controller coordinates separate local participant processes over TCP. The mock path has an explicit state machine, deterministic mock crypto, and a per-participant WAL for same-session process recovery. The real path wraps drand/kyber's deal, response, and justification rounds behind a crypto adapter. Its secret state stays in process memory. Both experiment runners inject local delivery and process faults; the mock participant exposes Prometheus metrics, and both paths emit structured request logs.
+The controller coordinates separate local participant processes over TCP. The mock path has an explicit state machine, deterministic mock crypto, and a per-participant WAL for same-session process recovery. The real path wraps drand/kyber's deal, response, and justification rounds behind a crypto adapter. Its secret state stays in process memory. The real process runner creates a short-lived local certificate authority and separate server and controller certificates; every RPC uses mutual TLS. Both experiment runners inject local delivery and process faults. Mock and real participants expose separate Prometheus metrics and emit structured request logs.
 
 ## Failure matrix
 
@@ -53,6 +53,7 @@ These are target outcomes. The [experiment records](docs/experiments.md) keep mo
 | M3 — Fault Injection | Deterministic delay, drop, duplicate, crash/restart, and partition schedules | Verified in local mock experiments |
 | M4 — Observability and Evidence | Structured logs, Prometheus metrics, machine-readable experiment results, regression tests | Verified for local mock runtime |
 | M5 — Real DKG Integration | Select drand/kyber; run signed packets with encrypted deal shares through four local processes and E0–E6 faults | Verified locally, with documented deployment and recovery limits |
+| M6 — Real Ceremony Supervision | Retry failed local process ceremonies with fresh identities and nonce; record decisions; authenticate RPC; verify share threshold in a test | Verified locally; multi-host deployment and distributed signing remain future work |
 
 ## Non-goals
 
@@ -73,11 +74,14 @@ go run ./cmd/dkgctl run --participants 4 --threshold 3
 go run ./cmd/dkgctl experiment --scenario E5 --format text --output results/E5.json
 go run ./cmd/dkgctl real-run --scenario E0
 go run ./cmd/dkgctl real-run --scenario E4
+go run ./cmd/dkgctl real-ceremony --journal .dkgctl/real-ceremony.jsonl
 ```
 
 `dkgctl participant --id p1 --listen 127.0.0.1:9001 --state-file ./state/p1.wal` keeps one participant's state across process restarts when launched again with the same ID and state file. The normal `run` command uses temporary state files and removes them when it exits.
 
-Add `--metrics-listen 127.0.0.1:9002` to a participant command to expose `/metrics`; participant requests are logged as JSON to stderr. Metrics use bounded operation, result, and SHARE outcome labels. Session IDs appear in logs and result files, not metric labels.
+`real-ceremony` runs a normal 3-of-4 ceremony. On a participant RPC or process failure it stops all four local processes, records an abort, and retries with new identities and nonce (at most two attempts by default). Its controller journal contains only nonce hashes and decisions; Kyber private state is never replayed. The E3 fault experiment uses the same supervisor and verifies that an old signed deal is rejected by the fresh session. An interrupted controller run is marked aborted on its next start; orphaned child processes from an abrupt controller crash are not currently reaped across controller restarts.
+
+Add `--metrics-listen 127.0.0.1:9002` to a mock or real participant command to expose `/metrics`; participant requests are logged as JSON to stderr. Real participant RPC requires `--tls-cert`, `--tls-key`, and `--tls-client-ca`. Real metrics count bounded RPC operations, results, packet outcomes, and phase; they carry no session ID or participant-provided label. The supervisor generates local certificates automatically. Externally supplied certificates and multi-host networking have not been exercised end to end.
 
 The seven [recorded mock experiments](docs/experiments.md) used a 300 ms SHARE deadline. E0–E3 completed; E4–E6 timed out. In the [real DKG results](docs/experiments.md), E0–E2 finalized at all four participants; E4 and E6 finalized at three; E5 finalized at none. E3 aborted the interrupted session and completed a new one. Each timing is a single local observation, not a performance guarantee.
 

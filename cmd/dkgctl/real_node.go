@@ -2,17 +2,16 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
-	"github.com/drand/kyber/share/dkg"
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/api"
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/cryptoadapter"
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/realexperiment"
@@ -23,12 +22,13 @@ type realTCPNode struct {
 	address string
 	command *exec.Cmd
 	stage   string
+	tls     *tls.Config
 }
 
 func (n *realTCPNode) call(request api.Request) (api.Response, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	response, err := (transport.TCP{Timeout: 3 * time.Second}).Call(ctx, n.address, request)
+	response, err := (transport.TCP{Timeout: 3 * time.Second, TLSConfig: n.tls}).Call(ctx, n.address, request)
 	if response.RealStage != "" {
 		n.stage = response.RealStage
 	}
@@ -128,15 +128,21 @@ func runRealProcessExperiment(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	nodes, processes, err := startRealProcessNodes()
-	if err != nil {
-		return err
-	}
-	defer stopProcesses(processes)
 	var result realexperiment.Result
+	var err error
 	if *scenario == "E3" {
-		result, err = runRealFreshSessionRecovery(nodes)
+		stateDir, err := os.MkdirTemp("", "dkgctl-real-e3-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(stateDir)
+		result, err = runRealCeremony(realCeremonyOptions{Journal: filepath.Join(stateDir, "ceremony.jsonl"), MaxAttempts: 2, InjectCrash: true})
 	} else {
+		nodes, processes, startErr := startRealProcessNodes()
+		if startErr != nil {
+			return startErr
+		}
+		defer stopProcesses(processes)
 		result, err = realexperiment.RunWithNodesHold(*scenario, nodes, *hold)
 	}
 	if err != nil {
@@ -162,6 +168,10 @@ func startRealProcessNodes() ([]realexperiment.Node, []participantProcess, error
 	if err != nil {
 		return nil, nil, err
 	}
+	credentials, err := newLocalRealTLSCredentials()
+	if err != nil {
+		return nil, nil, err
+	}
 	processes := make([]participantProcess, 0, 4)
 	nodes := make([]realexperiment.Node, 0, 4)
 	for i := 0; i < 4; i++ {
@@ -169,16 +179,23 @@ func startRealProcessNodes() ([]realexperiment.Node, []participantProcess, error
 		address, err := unusedAddress()
 		if err != nil {
 			stopProcesses(processes)
+			os.RemoveAll(credentials.dir)
 			return nil, nil, err
 		}
-		command := exec.Command(executable, "real-participant", "--id", id, "--index", fmt.Sprint(i), "--listen", address)
+		command := exec.Command(executable, "real-participant", "--id", id, "--index", fmt.Sprint(i), "--listen", address,
+			"--tls-cert", credentials.serverCert[i], "--tls-key", credentials.serverKey[i], "--tls-client-ca", credentials.caCert)
 		command.Stdout, command.Stderr = os.Stderr, os.Stderr
 		if err := command.Start(); err != nil {
 			stopProcesses(processes)
+			os.RemoveAll(credentials.dir)
 			return nil, nil, err
 		}
-		processes = append(processes, participantProcess{id: id, address: address, command: command})
-		nodes = append(nodes, &realTCPNode{address: address, command: command, stage: "INIT"})
+		process := participantProcess{id: id, address: address, command: command}
+		if i == 0 {
+			process.cleanupDir = credentials.dir
+		}
+		processes = append(processes, process)
+		nodes = append(nodes, &realTCPNode{address: address, command: command, stage: "INIT", tls: credentials.clientConfig(id)})
 	}
 	for i, node := range nodes {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -197,71 +214,4 @@ func startRealProcessNodes() ([]realexperiment.Node, []participantProcess, error
 		cancel()
 	}
 	return nodes, processes, nil
-}
-
-// A Kyber DKG engine cannot be reconstructed from the mock WAL. On a real
-// process crash, abort the old ceremony and start a new one with fresh node
-// identities and nonce; never replay old deals into the new ceremony.
-func runRealFreshSessionRecovery(nodes []realexperiment.Node) (realexperiment.Result, error) {
-	started := time.Now()
-	identities := make([]cryptoadapter.KyberIdentity, 4)
-	for i, node := range nodes {
-		identity, err := node.Identity()
-		if err != nil {
-			return realexperiment.Result{}, err
-		}
-		identities[i] = identity
-	}
-	nonce := dkg.GetNonce()
-	abortedNonceHash := sha256.Sum256(nonce)
-	for _, node := range nodes {
-		if err := node.Configure(identities, 3, nonce); err != nil {
-			return realexperiment.Result{}, err
-		}
-	}
-	deals := make([]cryptoadapter.KyberPacket, 4)
-	for i, node := range nodes {
-		deal, err := node.Deals()
-		if err != nil {
-			return realexperiment.Result{}, err
-		}
-		deals[i] = deal
-	}
-	if _, err := nodes[0].Accept(deals[1]); err != nil {
-		return realexperiment.Result{}, err
-	}
-	recoveryStarted := time.Now()
-	if err := nodes[0].(interface{ Crash() error }).Crash(); err != nil {
-		return realexperiment.Result{}, err
-	}
-	oldProcesses := make([]participantProcess, 0, 3)
-	for _, node := range nodes[1:] {
-		tcpNode := node.(*realTCPNode)
-		oldProcesses = append(oldProcesses, participantProcess{command: tcpNode.command})
-	}
-	stopProcesses(oldProcesses)
-	freshNodes, freshProcesses, err := startRealProcessNodes()
-	if err != nil {
-		return realexperiment.Result{}, err
-	}
-	defer stopProcesses(freshProcesses)
-	result, err := realexperiment.RunWithNodes("E0", freshNodes)
-	if err != nil {
-		return realexperiment.Result{}, err
-	}
-	result.Scenario = "E3"
-	result.AbortedNonceSHA256 = hex.EncodeToString(abortedNonceHash[:])
-	result.Fault = "p1 crashed after receiving p2 deal; old ceremony aborted; fresh ceremony completed"
-	result.InjectionPoint = "after first peer deal at p1"
-	result.ExpectedInvariant = "aborted session is not resumed; fresh nonce and identities produce one agreed group key"
-	result.TerminalResult = "completed_after_abort"
-	result.RecoveryMode = "fresh_session_after_abort"
-	result.AbortedSessions = 1
-	result.RestartedProcesses = 4
-	result.RetryCount = 1
-	result.FreshRunDurationMS = result.TotalDurationMS
-	result.TotalDurationMS = time.Since(started).Milliseconds()
-	recoveryDuration := time.Since(recoveryStarted).Milliseconds()
-	result.RecoveryDurationMS = &recoveryDuration
-	return result, nil
 }

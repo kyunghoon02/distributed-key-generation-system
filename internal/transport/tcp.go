@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -16,7 +17,8 @@ type Transport interface {
 }
 
 type TCP struct {
-	Timeout time.Duration
+	Timeout   time.Duration
+	TLSConfig *tls.Config
 }
 
 func (t TCP) Send(ctx context.Context, address string, message protocol.Message) error {
@@ -30,7 +32,13 @@ func (t TCP) Call(ctx context.Context, address string, request api.Request) (api
 		timeout = 3 * time.Second
 	}
 	dialer := net.Dialer{Timeout: timeout}
-	conn, err := dialer.DialContext(ctx, "tcp", address)
+	var conn net.Conn
+	var err error
+	if t.TLSConfig == nil {
+		conn, err = dialer.DialContext(ctx, "tcp", address)
+	} else {
+		conn, err = (&tls.Dialer{NetDialer: &dialer, Config: t.TLSConfig}).DialContext(ctx, "tcp", address)
+	}
 	if err != nil {
 		return api.Response{}, fmt.Errorf("connect to participant at %s: %w", address, err)
 	}

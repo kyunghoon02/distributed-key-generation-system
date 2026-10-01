@@ -67,3 +67,14 @@ M4 verification on 2026-10-01: `go test ./...` and `go test -race ./...` passed,
 M5 verification on 2026-10-01 (Go 1.25.0, darwin/arm64): `go test ./...`, `go test -race ./...`, and `go vet ./...` passed. Four local participant processes ran drand/kyber `v1.3.2` Pedersen DKG with Ed25519, signed packets, encrypted deal shares, and a 3-of-4 threshold. E0–E2 finalized at all four participants; E4 finalized at the three responsive participants with one group public key; E5's 2:2 split aborted with no finalization; E6 finalized at three and rejected the held packet after terminal state. E3 crashed p1 after one peer deal, aborted the interrupted ceremony, and completed a new one with fresh identities and nonce. These results are recorded under `results/real/2026-10-01/` from revision `f5e38932c9d40a116422d399c3570c462df917bb`. See [library selection](dkg-library-selection.md) and [experiment evidence](experiments.md).
 
 Real same-session DKG state restoration, authenticated remote RPC, key custody, and a security assessment remain outside this local M5 integration. The mock M2 WAL must not be presented as recovery for Kyber's private in-memory state.
+
+## M6 — Real Ceremony Supervision and Local Channel Authentication
+
+- [x] Run a normal real ceremony through a process supervisor, not an experiment-only E3 branch.
+- [x] Stop all local processes after an RPC/process failure and retry with fresh participant keys and nonce.
+- [x] Record started, aborted, and finalized controller decisions in a synced journal without private shares; reject a signed packet from the aborted session in E3.
+- [x] Require mutual TLS on real participant RPC; verify the expected server name and controller certificate.
+- [x] Expose bounded Prometheus metrics from real participant processes.
+- [x] Verify in an isolated adapter test that three finalized shares reconstruct a key that signs for the DKG group public key and that two shares cannot reconstruct it.
+
+M6 remains a local runtime milestone. Test-only secret reconstruction does not implement distributed threshold signing. The controller journal does not restore Kyber private state, and an abrupt controller crash may leave old local child processes running until cleaned up. Multi-host deployment, certificate lifecycle, key custody, distributed threshold signing, and security review remain future work.

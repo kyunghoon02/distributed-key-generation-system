@@ -7,7 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"sync"
+	"time"
 
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/api"
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/cryptoadapter"
@@ -16,9 +18,10 @@ import (
 // RealServer serializes access to a memory-only Kyber DKG participant. It
 // never exposes private scalar values or the final private signing share.
 type RealServer struct {
-	mu     sync.Mutex
-	node   *cryptoadapter.KyberParticipant
-	logger *slog.Logger
+	mu      sync.Mutex
+	node    *cryptoadapter.KyberParticipant
+	logger  *slog.Logger
+	metrics *realMetrics
 }
 
 func NewRealServer(id string, index uint32, logger *slog.Logger) (*RealServer, error) {
@@ -26,8 +29,12 @@ func NewRealServer(id string, index uint32, logger *slog.Logger) (*RealServer, e
 	if err != nil {
 		return nil, err
 	}
-	return &RealServer{node: node, logger: logger}, nil
+	server := &RealServer{node: node, logger: logger}
+	server.metrics = newRealMetrics(server)
+	return server, nil
 }
+
+func (s *RealServer) MetricsHandler() http.Handler { return s.metrics.handler() }
 
 func (s *RealServer) Serve(listener net.Listener) error {
 	for {
@@ -41,8 +48,10 @@ func (s *RealServer) Serve(listener net.Listener) error {
 
 func (s *RealServer) handle(conn net.Conn) {
 	defer conn.Close()
+	started := time.Now()
 	var request api.Request
 	if err := json.NewDecoder(io.LimitReader(conn, 1<<20)).Decode(&request); err != nil {
+		s.metrics.observeRequest("decode", false, time.Since(started))
 		_ = json.NewEncoder(conn).Encode(api.Response{Error: fmt.Sprintf("decode request: %v", err)})
 		return
 	}
@@ -50,6 +59,10 @@ func (s *RealServer) handle(conn net.Conn) {
 	response, err := s.dispatch(request)
 	response.RealStage = s.node.Stage()
 	s.mu.Unlock()
+	s.metrics.observeRequest(request.Operation, err == nil, time.Since(started))
+	if request.Operation == "real-accept" {
+		s.metrics.observePacket(response.RealDuplicate, err)
+	}
 	response.OK = err == nil
 	if err != nil {
 		response.Error = err.Error()

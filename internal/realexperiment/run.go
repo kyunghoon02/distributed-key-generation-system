@@ -68,6 +68,13 @@ type Node interface {
 	PublicResult() (cryptoadapter.KyberPublicResult, error)
 }
 
+type RunOptions struct {
+	Nonce          []byte
+	Hold           time.Duration
+	AfterConfigure func([]Node) error
+	AfterDelivery  func(int, int, cryptoadapter.KyberPacket) error
+}
+
 // Run executes a single memory-only Kyber DKG ceremony using a deterministic
 // delivery schedule. The cryptographic payloads remain random. This is not the
 // mock runtime's process/WAL recovery path.
@@ -91,10 +98,14 @@ func RunWithNodes(scenario string, nodes []Node) (Result, error) {
 }
 
 func RunWithNodesHold(scenario string, nodes []Node, hold time.Duration) (Result, error) {
+	return RunWithNodesOptions(scenario, nodes, RunOptions{Hold: hold})
+}
+
+func RunWithNodesOptions(scenario string, nodes []Node, options RunOptions) (Result, error) {
 	if len(nodes) != 4 {
 		return Result{}, errors.New("real experiments require four nodes")
 	}
-	if hold < 0 {
+	if options.Hold < 0 {
 		return Result{}, errors.New("negative packet hold duration")
 	}
 	faults := map[string]string{
@@ -104,7 +115,7 @@ func RunWithNodesHold(scenario string, nodes []Node, hold time.Duration) (Result
 	}
 	fault, ok := faults[scenario]
 	if !ok {
-		return Result{}, fmt.Errorf("unsupported real DKG scenario %q (E3 recovery requires durable crypto state)", scenario)
+		return Result{}, fmt.Errorf("unsupported real DKG scenario %q (E3 uses the process supervisor)", scenario)
 	}
 	started := time.Now()
 	invariants := map[string]string{
@@ -127,11 +138,22 @@ func RunWithNodesHold(scenario string, nodes []Node, hold time.Duration) (Result
 			return Result{}, err
 		}
 	}
-	nonce := dkg.GetNonce()
+	nonce := options.Nonce
+	if nonce == nil {
+		nonce = dkg.GetNonce()
+	}
+	if len(nonce) != dkg.NonceLength {
+		return Result{}, errors.New("invalid DKG nonce length")
+	}
 	nonceHash := sha256.Sum256(nonce)
 	result.SessionNonceSHA256 = hex.EncodeToString(nonceHash[:])
 	for _, node := range nodes {
 		if err := node.Configure(identities, 3, nonce); err != nil {
+			return Result{}, err
+		}
+	}
+	if options.AfterConfigure != nil {
+		if err := options.AfterConfigure(nodes); err != nil {
 			return Result{}, err
 		}
 	}
@@ -180,6 +202,11 @@ func RunWithNodesHold(scenario string, nodes []Node, hold time.Duration) (Result
 		}
 		if _, err := nodes[to].Accept(wire); err != nil {
 			return fmt.Errorf("%s %d -> %d: %w", packet.Kind, from, to, err)
+		}
+		if options.AfterDelivery != nil {
+			if err := options.AfterDelivery(from, to, wire); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -314,7 +341,7 @@ func RunWithNodesHold(scenario string, nodes []Node, hold time.Duration) (Result
 	}
 	if scenario == "E6" {
 		holdStarted := time.Now()
-		time.Sleep(hold)
+		time.Sleep(options.Hold)
 		result.HoldDurationMS = time.Since(holdStarted).Milliseconds()
 		result.PhaseDurationMS["held_after_terminal"] = result.HoldDurationMS
 		for to := 0; to < 3; to++ {

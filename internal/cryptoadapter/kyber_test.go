@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/drand/kyber/share"
 	"github.com/drand/kyber/share/dkg"
+	"github.com/drand/kyber/sign/schnorr"
 )
 
 func TestKyberNormalCeremony(t *testing.T) {
@@ -85,6 +87,28 @@ func TestKyberNormalCeremony(t *testing.T) {
 		if len(result.PublicShare) == 0 || result.Qualified != count {
 			t.Fatalf("invalid result: %+v", result)
 		}
+	}
+	// Test-only reconstruction checks that the finalized shares form a 3-of-4
+	// key. Private shares never cross the process RPC in the real runner.
+	shares := []*share.PriShare{
+		participants[0].result.Key.Share,
+		participants[1].result.Key.Share,
+		participants[2].result.Key.Share,
+	}
+	secret, err := share.RecoverSecret(participants[0].suite, shares, 3, count)
+	if err != nil {
+		t.Fatal(err)
+	}
+	message := []byte("DKG share reconstruction test")
+	signature, err := schnorr.Sign(participants[0].suite, secret, message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := schnorr.Verify(participants[0].suite, participants[0].result.Key.Public(), message, signature); err != nil {
+		t.Fatalf("reconstructed key cannot sign for DKG group public key: %v", err)
+	}
+	if _, err := share.RecoverSecret(participants[0].suite, shares[:2], 3, count); err == nil {
+		t.Fatal("two shares unexpectedly reconstructed a 3-of-4 key")
 	}
 }
 
