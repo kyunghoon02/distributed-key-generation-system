@@ -12,6 +12,7 @@ const (
 	EventBegin    EventType = "begin"
 	EventShare    EventType = "share"
 	EventFinalize EventType = "finalize"
+	EventTimeout  EventType = "timeout"
 )
 
 // Event records an accepted state change. Begin includes the participant's
@@ -49,6 +50,8 @@ func RecoverMachine(participantID string, adapter cryptoadapter.Adapter, journal
 			err = machine.ReceiveShare(event.Message)
 		case EventFinalize:
 			err = machine.Finalize()
+		case EventTimeout:
+			err = machine.Timeout()
 		default:
 			err = fmt.Errorf("unknown event type %q", event.Type)
 		}

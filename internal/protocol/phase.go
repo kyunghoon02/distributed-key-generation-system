@@ -10,4 +10,5 @@ const (
 	PhaseComplaint     Phase = "COMPLAINT"
 	PhaseConfirm       Phase = "CONFIRM"
 	PhaseFinalize      Phase = "FINALIZE"
+	PhaseTimedOut      Phase = "TIMED_OUT"
 )

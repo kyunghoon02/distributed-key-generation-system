@@ -122,43 +122,58 @@ func (m *Machine) outbound() []Message {
 }
 
 func (m *Machine) ReceiveShare(message Message) error {
+	_, err := m.ReceiveShareWithOutcome(message)
+	return err
+}
+
+type ShareOutcome string
+
+const (
+	ShareApplied   ShareOutcome = "applied"
+	ShareDuplicate ShareOutcome = "duplicate"
+)
+
+// ReceiveShareWithOutcome reports whether an accepted delivery changed state.
+func (m *Machine) ReceiveShareWithOutcome(message Message) (ShareOutcome, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.phase == PhaseInit {
-		return fmt.Errorf("receive share in %s: %w", m.phase, ErrInvalidPhase)
+		return "", fmt.Errorf("receive share in %s: %w", m.phase, ErrInvalidPhase)
 	}
 	if message.SessionID != m.config.SessionID || message.Epoch != m.config.Epoch || message.Round != m.config.Round {
-		return ErrStaleMessage
+		return "", ErrStaleMessage
 	}
 	if message.Phase != PhaseShareExchange || message.To != m.id || message.From == m.id ||
 		!slices.Contains(m.config.Participants, message.From) || message.MessageID == "" ||
 		message.MessageID != message.LogicalID() {
-		return ErrInvalidMessage
+		return "", ErrInvalidMessage
 	}
 	if appliedPayload, ok := m.applied[message.MessageID]; ok {
 		if appliedPayload != message.Payload {
-			return ErrInvalidMessage
+			return "", ErrInvalidMessage
 		}
-		return nil
+		return ShareDuplicate, nil
 	}
 	if m.phase != PhaseShareExchange {
-		return fmt.Errorf("receive share in %s: %w", m.phase, ErrStaleMessage)
+		return "", fmt.Errorf("receive share in %s: %w", m.phase, ErrStaleMessage)
 	}
 	if !m.crypto.VerifyContribution(m.config.SessionID, message.From, message.Payload) {
-		return ErrInvalidMessage
+		return "", ErrInvalidMessage
 	}
 	if m.journal != nil {
 		if err := m.journal.Append(Event{Type: EventShare, Message: message}); err != nil {
-			return fmt.Errorf("record share: %w", err)
+			return "", fmt.Errorf("record share: %w", err)
 		}
 	}
 	m.applied[message.MessageID] = message.Payload
 	m.contributions[message.From] = message.Payload
 	if len(m.contributions) == len(m.config.Participants) {
-		return m.transition(PhaseVerify)
+		if err := m.transition(PhaseVerify); err != nil {
+			return "", err
+		}
 	}
-	return nil
+	return ShareApplied, nil
 }
 
 func (m *Machine) Finalize() error {
@@ -185,6 +200,24 @@ func (m *Machine) Finalize() error {
 	return m.transition(PhaseFinalize)
 }
 
+// Timeout ends a ceremony without finalizing it. Late shares cannot revive it.
+func (m *Machine) Timeout() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.phase == PhaseTimedOut {
+		return nil
+	}
+	if m.phase != PhaseShareExchange && m.phase != PhaseVerify {
+		return fmt.Errorf("timeout from %s: %w", m.phase, ErrInvalidPhase)
+	}
+	if m.journal != nil {
+		if err := m.journal.Append(Event{Type: EventTimeout}); err != nil {
+			return fmt.Errorf("record timeout: %w", err)
+		}
+	}
+	return m.transition(PhaseTimedOut)
+}
+
 func sameConfig(a, b Config) bool {
 	return a.SessionID == b.SessionID && a.Epoch == b.Epoch && a.Round == b.Round &&
 		a.Threshold == b.Threshold && slices.Equal(a.Participants, b.Participants)
@@ -206,6 +239,11 @@ func (m *Machine) Status() Status {
 }
 
 func (m *Machine) transition(next Phase) error {
+	if next == PhaseTimedOut && (m.phase == PhaseShareExchange || m.phase == PhaseVerify) {
+		m.phase = next
+		m.transitions = append(m.transitions, next)
+		return nil
+	}
 	allowed := map[Phase]Phase{
 		PhaseInit:          PhaseDeal,
 		PhaseDeal:          PhaseShareExchange,

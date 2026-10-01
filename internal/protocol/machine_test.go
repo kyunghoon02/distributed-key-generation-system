@@ -145,6 +145,33 @@ func TestConflictingDuplicateIsRejected(t *testing.T) {
 	}
 }
 
+func TestTimeoutRejectsLateShareWithoutFinalizing(t *testing.T) {
+	config := Config{SessionID: "timeout-session", Epoch: 1, Round: 1, Threshold: 2, Participants: []string{"p1", "p2"}}
+	machine := NewMachine("p1", cryptoadapter.Mock{})
+	if _, err := machine.Begin(config); err != nil {
+		t.Fatal(err)
+	}
+	if err := machine.Timeout(); err != nil {
+		t.Fatal(err)
+	}
+	before := machine.Status()
+	if before.Phase != PhaseTimedOut {
+		t.Fatalf("phase = %s, want TIMED_OUT", before.Phase)
+	}
+	if err := machine.ReceiveShare(outboundShare(t, config, "p2", "p1")); !errors.Is(err, ErrStaleMessage) {
+		t.Fatalf("late share error = %v, want ErrStaleMessage", err)
+	}
+	if err := machine.Finalize(); !errors.Is(err, ErrNotReady) {
+		t.Fatalf("finalize error = %v, want ErrNotReady", err)
+	}
+	if err := machine.Timeout(); err != nil {
+		t.Fatalf("repeated timeout: %v", err)
+	}
+	if got := machine.Status(); !reflect.DeepEqual(got, before) {
+		t.Fatalf("terminal state changed: before=%+v after=%+v", before, got)
+	}
+}
+
 func outboundShare(t *testing.T, config Config, from, to string) Message {
 	t.Helper()
 	sender := NewMachine(from, cryptoadapter.Mock{})

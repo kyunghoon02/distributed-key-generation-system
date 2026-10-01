@@ -1,9 +1,13 @@
 package participant_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +24,10 @@ func TestDeliverySemanticsOverTCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listener.Close()
-	go func() { _ = participant.NewServer("p1", cryptoadapter.Mock{}).Serve(listener) }()
+	server := participant.NewServer("p1", cryptoadapter.Mock{})
+	var logs bytes.Buffer
+	server.SetLogger(slog.New(slog.NewJSONHandler(&logs, nil)))
+	go func() { _ = server.Serve(listener) }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -61,5 +68,28 @@ func TestDeliverySemanticsOverTCP(t *testing.T) {
 	}
 	if !reflect.DeepEqual(after.Status, before.Status) {
 		t.Fatalf("duplicate or stale delivery changed status: before=%+v after=%+v", before.Status, after.Status)
+	}
+	metrics := httptest.NewRecorder()
+	server.MetricsHandler().ServeHTTP(metrics, httptest.NewRequest("GET", "/metrics", nil))
+	if metrics.Code != 200 {
+		t.Fatalf("metrics status = %d", metrics.Code)
+	}
+	for _, sample := range []string{
+		`dkg_share_deliveries_total{outcome="applied"} 1`,
+		`dkg_share_deliveries_total{outcome="duplicate"} 1`,
+		`dkg_share_deliveries_total{outcome="stale"} 1`,
+		`dkg_participant_phase_code 3`,
+	} {
+		if !strings.Contains(metrics.Body.String(), sample) {
+			t.Fatalf("metrics missing %q:\n%s", sample, metrics.Body.String())
+		}
+	}
+	if strings.Contains(metrics.Body.String(), config.SessionID) || strings.Contains(metrics.Body.String(), message.Payload) {
+		t.Fatal("metrics exposed session or payload")
+	}
+	if !strings.Contains(logs.String(), `"operation":"deliver"`) ||
+		!strings.Contains(logs.String(), `"session_id":"tcp-session"`) ||
+		strings.Contains(logs.String(), message.Payload) {
+		t.Fatalf("structured logs missing fields or exposed payload: %s", logs.String())
 	}
 }

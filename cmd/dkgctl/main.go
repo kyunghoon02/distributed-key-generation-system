@@ -6,7 +6,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,8 +41,10 @@ func main() {
 		err = runParticipant(os.Args[2:])
 	case len(os.Args) > 1 && os.Args[1] == "run":
 		err = run(os.Args[2:])
+	case len(os.Args) > 1 && os.Args[1] == "experiment":
+		err = runExperiment(os.Args[2:])
 	default:
-		fmt.Fprintln(os.Stderr, "usage: dkgctl run [--participants N] [--threshold T]")
+		fmt.Fprintln(os.Stderr, "usage: dkgctl run [--participants N] [--threshold T] | experiment --scenario E0..E6")
 		os.Exit(2)
 	}
 	if err != nil {
@@ -54,6 +58,7 @@ func runParticipant(args []string) error {
 	id := flags.String("id", "", "stable participant ID")
 	address := flags.String("listen", "127.0.0.1:0", "TCP listen address")
 	stateFile := flags.String("state-file", "", "durable participant state file")
+	metricsAddress := flags.String("metrics-listen", "", "optional Prometheus HTTP listen address")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -65,18 +70,32 @@ func runParticipant(args []string) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	defer listener.Close()
-	return participantServer(*id, *stateFile, listener)
+	return participantServer(*id, *stateFile, *metricsAddress, listener)
 }
 
-func participantServer(id, stateFile string, listener net.Listener) error {
+func participantServer(id, stateFile, metricsAddress string, listener net.Listener) error {
+	var server *participant.Server
 	if stateFile == "" {
-		return participant.NewServer(id, cryptoadapter.Mock{}).Serve(listener)
-	}
-	server, err := participant.NewDurableServer(id, cryptoadapter.Mock{}, stateFile)
-	if err != nil {
-		return fmt.Errorf("recover participant state: %w", err)
+		server = participant.NewServer(id, cryptoadapter.Mock{})
+	} else {
+		var err error
+		server, err = participant.NewDurableServer(id, cryptoadapter.Mock{}, stateFile)
+		if err != nil {
+			return fmt.Errorf("recover participant state: %w", err)
+		}
 	}
 	defer server.Close()
+	server.SetLogger(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+	if metricsAddress != "" {
+		metricsListener, err := net.Listen("tcp", metricsAddress)
+		if err != nil {
+			return fmt.Errorf("listen for metrics: %w", err)
+		}
+		defer metricsListener.Close()
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", server.MetricsHandler())
+		go func() { _ = http.Serve(metricsListener, mux) }()
+	}
 	return server.Serve(listener)
 }
 
@@ -213,7 +232,7 @@ func waitReady(ctx context.Context, client transport.TCP, address string) error 
 
 func stopProcesses(processes []participantProcess) {
 	for _, process := range processes {
-		if process.command.Process != nil {
+		if process.command != nil && process.command.Process != nil {
 			_ = process.command.Process.Kill()
 			_ = process.command.Wait()
 		}
