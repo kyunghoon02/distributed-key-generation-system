@@ -12,23 +12,22 @@ Protocol descriptions often assume authenticated, reliable channels. Real proces
 
 ## Architecture
 
-Target control and data path:
+Current local experiment path:
 
 ```text
 dkgctl
-  └─ participant processes
-       └─ transport
-            └─ deterministic fault injection
+  ├─ deterministic packet delivery / fault schedules
+  └─ TCP or mutual TLS RPC → participant processes
 ```
 
-Participant internals:
+Participant internals differ by path:
 
 ```text
-Network Transport → Message Validation → Protocol State Machine
-                  → Crypto Adapter → Durable State → Metrics
+mock: TCP → message validation → explicit state machine → mock adapter → WAL → metrics
+real: mutual TLS → signed packet validation → Kyber DKG → in-memory share → metrics
 ```
 
-The controller coordinates separate local participant processes over TCP. The mock path has an explicit state machine, deterministic mock crypto, and a per-participant WAL for same-session process recovery. The real path wraps drand/kyber's deal, response, and justification rounds behind a crypto adapter. Its secret state stays in process memory. The real process runner creates a short-lived local certificate authority and separate server and controller certificates; every RPC uses mutual TLS. Both experiment runners inject local delivery and process faults. Mock and real participants expose separate Prometheus metrics and emit structured request logs.
+The controller coordinates separate local participant processes and currently relays all DKG packets. The mock path has an explicit state machine, deterministic mock crypto, and a per-participant WAL for same-session process recovery. The real path wraps drand/kyber's deal, response, and justification rounds behind a crypto adapter. Its secret state stays in process memory. The real process runner creates a short-lived local certificate authority and separate server and controller certificates; every RPC uses mutual TLS. Both experiment runners inject local delivery and process faults. Mock and real participants expose separate Prometheus metrics and emit structured request logs. The [proposed final architecture](docs/architecture.md#proposed-final-architecture) moves DKG packet exchange to authenticated peer connections and keeps the coordinator on the control path.
 
 ## Failure matrix
 

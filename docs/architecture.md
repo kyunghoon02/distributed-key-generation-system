@@ -24,6 +24,8 @@ This document separates the code that runs today from the proposed end state. Cu
 
 The controller launches local processes, collects their public identities, chooses delivery order, forwards packets, and collects terminal results. The final private DKG shares are not returned through the result API. The controller does see relayed protocol packets; justification packets can contain share material. The real packet path is a controller relay for local experiments; participant-to-participant networking is not implemented.
 
+This relay makes fault injection repeatable, but it is one availability dependency and one place that can withhold or reorder every packet. Packet signatures stop undetected modification of signed content; they do not guarantee delivery. Moving packet exchange to peers removes that relay dependency, while still requiring authenticated membership and consistent broadcast behavior.
+
 | Code | Responsibility |
 |---|---|
 | [`cmd/dkgctl`](../cmd/dkgctl/main.go) | CLI, local process lifecycle, normal runs, and fault schedules |
@@ -58,32 +60,29 @@ Mock and real participants expose separate bounded-label Prometheus metrics and 
 
 The intended end state adds a usable threshold signing flow after DKG while keeping every private share within its owning participant. This is a design target, not an implemented or verified architecture.
 
-```text
-                              Client / operator
-                         create ceremony | sign request
-                                        |
-                              Control API / coordinator
-                     roster, session, retry, public-key registry
-                              durable decision history
-                                        |
-                        authenticated, bounded packet transport
-                        /               |                \
-                participant p1     participant p2    participant p3/p4
-                DKG + TSS signer   DKG + TSS signer   DKG + TSS signer
-                protected share    protected share    protected share
-                state + metrics    state + metrics    state + metrics
-                        \               |                /
-                         public group key / signature shares
-                                        |
-                             combine and verify signature
-                                        |
-                                verified result + audit
+```mermaid
+flowchart TB
+    U[Client / operator] --> C[Coordinator: roster, session, decisions]
+    C -->|roster and start command| P1[Participant p1: DKG + TSS]
+    C -->|roster and start command| P2[Participant p2: DKG + TSS]
+    C -->|roster and start command| P3[Participant p3: DKG + TSS]
+    C -->|roster and start command| P4[Participant p4: DKG + TSS]
+    P1 <-->|authenticated DKG packets| M[Peer mesh]
+    P2 <--> M
+    P3 <--> M
+    P4 <--> M
+    P1 -->|public result / signing contribution| V[Combine and verify]
+    P2 --> V
+    P3 --> V
+    P4 --> V
+    V --> U
+    C --> J[Durable decisions and public-key registry]
 ```
 
-**DKG path:** The coordinator fixes an authenticated roster and unique session/epoch. Participants exchange verified DKG packets, finalize under the selected protocol's qualification rule, and retain their private shares under a defined custody and recovery policy. The coordinator records the public group key and only public ceremony evidence. A failed ceremony is fenced and restarted with a new nonce unless the chosen library supports a verified safe checkpoint format.
+**DKG path:** The coordinator fixes an authenticated roster and unique session/epoch and starts the ceremony. Participants then exchange DKG packets directly with peers over authenticated channels, finalize under the selected protocol's qualification rule, and retain their private shares under a defined custody and recovery policy. The coordinator records public results and ceremony decisions; it is not on the DKG packet data path. A failed ceremony is fenced and restarted with a new nonce unless the chosen library supports a verified safe checkpoint format. This split resembles drand's [coordinator setup and node-driven DKG](https://docs.drand.love/docs/specification/), but the current repository has not implemented the peer transport.
 
 **Signing path:** A sign request binds a key/epoch, message digest, and request ID. At least three authorized participants use their own shares to produce signing contributions. A combiner assembles and verifies one signature against the DKG group public key. Two participants cannot produce a valid signature; no component reconstructs or stores the complete private key. Replay, duplicate requests, participant loss, and timeout must have explicit terminal behavior.
 
-**Operational path:** Deploy participants on separate failure domains with authenticated communication, provision and rotate identities, protect persistent signing shares, and expose bounded metrics, structured events, and audit records. Define whether the coordinator may inspect protocol packets or should relay end-to-end protected payloads, including justifications. The coordinator and transport need recovery rules that avoid two active attempts for one ceremony. Multi-host fault tests must back any availability claim.
+**Operational path:** Deploy participants on separate failure domains with authenticated communication, provision and rotate identities, protect persistent signing shares, and expose bounded metrics, structured events, and audit records. Separate operator control RPC from participant packet RPC, as drand's [DKG control-plane postmortem](https://docs.drand.love/blog/2025/03/21/drand-v2-0-postmortem/) illustrates. Signed peer packets still need delivery, replay, timeout, and consistent-broadcast rules: a P2P mesh alone does not make a broadcast reliable or prevent equivocation, a limitation noted in drand's [security model](https://docs.drand.love/docs/security-model/). The coordinator and peers need recovery rules that avoid two active attempts for one ceremony. Multi-host fault tests must back any availability claim.
 
 The signing protocol and curve remain a design decision. The current Ed25519 DKG adapter does not include a compatible distributed signing implementation. The test that reconstructs three shares in one process proves a narrow key-consistency property; it must not be used as the signing path. A future protocol/library choice must establish share compatibility, security assumptions, key storage format, and 3-of-4/2-of-4 process-level tests before this diagram can be described as implemented.
