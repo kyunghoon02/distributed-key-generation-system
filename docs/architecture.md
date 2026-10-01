@@ -40,7 +40,7 @@ Defines the boundary for protocol-specific cryptographic work. Early milestones 
 
 ### Durable state
 
-M2 adds an append-only WAL or equivalent durable event store. Replay must reconstruct the same participant state as before a crash without applying a logical message twice.
+M2 uses one append-only JSON-line WAL per participant. Accepted `begin`, SHARE, and `finalize` events are synced before the participant acknowledges them. A restarted process replays the same file before serving requests; replay restores applied message IDs as well as protocol state. An incomplete trailing record is discarded, while a malformed complete record blocks startup. The state file assumes one active writer and storage that survives process restart; node loss and automated process restart are outside M2.
 
 ### Observability
 

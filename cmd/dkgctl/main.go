@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -52,6 +53,7 @@ func runParticipant(args []string) error {
 	flags := flag.NewFlagSet("participant", flag.ContinueOnError)
 	id := flags.String("id", "", "stable participant ID")
 	address := flags.String("listen", "127.0.0.1:0", "TCP listen address")
+	stateFile := flags.String("state-file", "", "durable participant state file")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -63,11 +65,19 @@ func runParticipant(args []string) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	defer listener.Close()
-	return participantServer(*id, listener)
+	return participantServer(*id, *stateFile, listener)
 }
 
-func participantServer(id string, listener net.Listener) error {
-	return participant.NewServer(id, cryptoadapter.Mock{}).Serve(listener)
+func participantServer(id, stateFile string, listener net.Listener) error {
+	if stateFile == "" {
+		return participant.NewServer(id, cryptoadapter.Mock{}).Serve(listener)
+	}
+	server, err := participant.NewDurableServer(id, cryptoadapter.Mock{}, stateFile)
+	if err != nil {
+		return fmt.Errorf("recover participant state: %w", err)
+	}
+	defer server.Close()
+	return server.Serve(listener)
 }
 
 func run(args []string) error {
@@ -85,6 +95,11 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("locate dkgctl executable: %w", err)
 	}
+	stateDir, err := os.MkdirTemp("", "dkgctl-state-")
+	if err != nil {
+		return fmt.Errorf("create temporary state directory: %w", err)
+	}
+	defer os.RemoveAll(stateDir)
 	processes := make([]participantProcess, 0, *participantCount)
 	for i := 0; i < *participantCount; i++ {
 		id := fmt.Sprintf("p%d", i+1)
@@ -93,7 +108,8 @@ func run(args []string) error {
 			stopProcesses(processes)
 			return err
 		}
-		command := exec.Command(executable, "participant", "--id", id, "--listen", address)
+		command := exec.Command(executable, "participant", "--id", id, "--listen", address,
+			"--state-file", filepath.Join(stateDir, id+".wal"))
 		command.Stdout = os.Stderr
 		command.Stderr = os.Stderr
 		if err := command.Start(); err != nil {

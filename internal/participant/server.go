@@ -7,15 +7,37 @@ import (
 
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/api"
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/cryptoadapter"
+	"github.com/kyunghoon02/distributed-key-generation-system/internal/durable"
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/protocol"
 )
 
 type Server struct {
 	machine *protocol.Machine
+	journal *durable.WAL
 }
 
 func NewServer(id string, adapter cryptoadapter.Adapter) *Server {
 	return &Server{machine: protocol.NewMachine(id, adapter)}
+}
+
+func NewDurableServer(id string, adapter cryptoadapter.Adapter, stateFile string) (*Server, error) {
+	journal, err := durable.Open(stateFile)
+	if err != nil {
+		return nil, err
+	}
+	machine, err := protocol.RecoverMachine(id, adapter, journal)
+	if err != nil {
+		_ = journal.Close()
+		return nil, err
+	}
+	return &Server{machine: machine, journal: journal}, nil
+}
+
+func (s *Server) Close() error {
+	if s.journal != nil {
+		return s.journal.Close()
+	}
+	return nil
 }
 
 func (s *Server) Serve(listener net.Listener) error {

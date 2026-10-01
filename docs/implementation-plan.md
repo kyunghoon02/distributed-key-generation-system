@@ -28,11 +28,13 @@ M1 verification on 2026-10-01 (Go 1.24.4, darwin/arm64): `go test ./...` and `go
 
 ## M2 — Crash Recovery
 
-- [ ] Add WAL or equivalent durable state.
-- [ ] Replay durable events on process restart.
-- [ ] Resume the same ceremony from SHARE.
-- [ ] Reproduce crash during SHARE and record recovery duration.
-- [ ] Verify replay consistency and no duplicate state mutation.
+- [x] Add WAL or equivalent durable state.
+- [x] Replay durable events on process restart.
+- [x] Resume the same ceremony from SHARE.
+- [x] Reproduce crash during SHARE and record recovery duration.
+- [x] Verify replay consistency and no duplicate state mutation.
+
+M2 verification on 2026-10-01 (Go 1.24.4, darwin/arm64): `go test ./...` and `go test -race ./...` passed. `TestCrashRecoveryDuringShare` killed one of three participant processes after it had accepted one peer SHARE (2/3 contributions), then restarted it with the same WAL. Replayed status and transitions matched the pre-crash state; retrying `begin` and the same SHARE added no WAL record or state transition. All three participants reached `FINALIZE`, and a second restart restored the terminal state. One local run measured 22.534375 ms from process restart to the first recovered status response. This is a single observation, not a latency guarantee or a complete E3 experiment record.
 
 ## M3 — Fault Injection
 

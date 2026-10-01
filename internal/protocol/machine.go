@@ -33,6 +33,7 @@ type Machine struct {
 	crypto        cryptoadapter.Adapter
 	config        Config
 	phase         Phase
+	journal       Journal
 	contributions map[string]string
 	applied       map[string]string
 	transitions   []Phase
@@ -54,6 +55,9 @@ func (m *Machine) Begin(config Config) ([]Message, error) {
 	defer m.mu.Unlock()
 
 	if m.phase != PhaseInit {
+		if sameConfig(config, m.config) {
+			return m.outbound(), nil
+		}
 		return nil, fmt.Errorf("begin from %s: %w", m.phase, ErrInvalidPhase)
 	}
 	if err := validateConfig(config, m.id); err != nil {
@@ -62,6 +66,21 @@ func (m *Machine) Begin(config Config) ([]Message, error) {
 	contribution, err := m.crypto.CreateContribution(config.SessionID, m.id)
 	if err != nil {
 		return nil, fmt.Errorf("create mock contribution: %w", err)
+	}
+	if m.journal != nil {
+		if err := m.journal.Append(Event{Type: EventBegin, ParticipantID: m.id, Config: config, Contribution: contribution}); err != nil {
+			return nil, fmt.Errorf("record begin: %w", err)
+		}
+	}
+	return m.applyBegin(config, contribution)
+}
+
+func (m *Machine) applyBegin(config Config, contribution string) ([]Message, error) {
+	if m.phase != PhaseInit {
+		return nil, ErrInvalidPhase
+	}
+	if err := validateConfig(config, m.id); err != nil {
+		return nil, err
 	}
 	m.config = config
 	m.config.Participants = slices.Clone(config.Participants)
@@ -73,29 +92,33 @@ func (m *Machine) Begin(config Config) ([]Message, error) {
 		return nil, err
 	}
 
-	outbound := make([]Message, 0, len(config.Participants)-1)
-	for _, peerID := range config.Participants {
-		if peerID == m.id {
-			continue
-		}
-		message := Message{
-			SessionID: config.SessionID,
-			Epoch:     config.Epoch,
-			Round:     config.Round,
-			Phase:     PhaseShareExchange,
-			From:      m.id,
-			To:        peerID,
-			Payload:   contribution,
-		}
-		message.MessageID = message.LogicalID()
-		outbound = append(outbound, message)
-	}
 	if len(m.contributions) == len(config.Participants) {
 		if err := m.transition(PhaseVerify); err != nil {
 			return nil, err
 		}
 	}
-	return outbound, nil
+	return m.outbound(), nil
+}
+
+func (m *Machine) outbound() []Message {
+	outbound := make([]Message, 0, len(m.config.Participants)-1)
+	for _, peerID := range m.config.Participants {
+		if peerID == m.id {
+			continue
+		}
+		message := Message{
+			SessionID: m.config.SessionID,
+			Epoch:     m.config.Epoch,
+			Round:     m.config.Round,
+			Phase:     PhaseShareExchange,
+			From:      m.id,
+			To:        peerID,
+			Payload:   m.contributions[m.id],
+		}
+		message.MessageID = message.LogicalID()
+		outbound = append(outbound, message)
+	}
+	return outbound
 }
 
 func (m *Machine) ReceiveShare(message Message) error {
@@ -125,6 +148,11 @@ func (m *Machine) ReceiveShare(message Message) error {
 	if !m.crypto.VerifyContribution(m.config.SessionID, message.From, message.Payload) {
 		return ErrInvalidMessage
 	}
+	if m.journal != nil {
+		if err := m.journal.Append(Event{Type: EventShare, Message: message}); err != nil {
+			return fmt.Errorf("record share: %w", err)
+		}
+	}
 	m.applied[message.MessageID] = message.Payload
 	m.contributions[message.From] = message.Payload
 	if len(m.contributions) == len(m.config.Participants) {
@@ -149,7 +177,17 @@ func (m *Machine) Finalize() error {
 			return fmt.Errorf("invalid contribution from %q: %w", participantID, ErrInvalidMessage)
 		}
 	}
+	if m.journal != nil {
+		if err := m.journal.Append(Event{Type: EventFinalize}); err != nil {
+			return fmt.Errorf("record finalize: %w", err)
+		}
+	}
 	return m.transition(PhaseFinalize)
+}
+
+func sameConfig(a, b Config) bool {
+	return a.SessionID == b.SessionID && a.Epoch == b.Epoch && a.Round == b.Round &&
+		a.Threshold == b.Threshold && slices.Equal(a.Participants, b.Participants)
 }
 
 func (m *Machine) Status() Status {
