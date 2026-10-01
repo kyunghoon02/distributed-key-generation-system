@@ -10,30 +10,30 @@ import (
 )
 
 var (
-	ErrInvalidConfig = errors.New("invalid ceremony config")
-	ErrInvalidPhase  = errors.New("invalid protocol phase")
+	ErrInvalidConfig  = errors.New("invalid ceremony config")
+	ErrInvalidPhase   = errors.New("invalid protocol phase")
 	ErrInvalidMessage = errors.New("invalid protocol message")
-	ErrNotReady      = errors.New("participant is not ready to finalize")
+	ErrNotReady       = errors.New("participant is not ready to finalize")
 )
 
 type Status struct {
-	ParticipantID string `json:"participant_id"`
-	SessionID     string `json:"session_id,omitempty"`
-	Phase         Phase  `json:"phase"`
-	Received      int    `json:"received"`
-	Expected      int    `json:"expected"`
-	Threshold     int    `json:"threshold"`
+	ParticipantID string  `json:"participant_id"`
+	SessionID     string  `json:"session_id,omitempty"`
+	Phase         Phase   `json:"phase"`
+	Received      int     `json:"received"`
+	Expected      int     `json:"expected"`
+	Threshold     int     `json:"threshold"`
 	Transitions   []Phase `json:"transitions"`
 }
 
 type Machine struct {
-	mu           sync.Mutex
-	id           string
-	crypto       cryptoadapter.Adapter
-	config       Config
-	phase        Phase
+	mu            sync.Mutex
+	id            string
+	crypto        cryptoadapter.Adapter
+	config        Config
+	phase         Phase
 	contributions map[string]string
-	transitions  []Phase
+	transitions   []Phase
 }
 
 func NewMachine(participantID string, adapter cryptoadapter.Adapter) *Machine {

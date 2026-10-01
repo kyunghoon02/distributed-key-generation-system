@@ -11,8 +11,10 @@ Work one milestone at a time. A milestone is complete only when its exit criteri
 - [x] Implement deterministic mock crypto adapter.
 - [x] Implement participant process and controller/CLI.
 - [x] Add deterministic normal integration test with multiple participant processes.
-- [ ] Pass M0 exit criteria: participants communicate, normal ceremony reaches terminal success, transitions are explicit and testable.
-- [ ] Record executed test evidence and update README status.
+- [x] Pass M0 exit criteria: participants communicate, normal ceremony reaches terminal success, transitions are explicit and testable.
+- [x] Record executed test evidence and update README status.
+
+M0 verification on 2026-10-01 (Go 1.24.4, darwin/arm64): `go test ./...` and `go test -race ./...` passed. `go run ./cmd/dkgctl run --participants 4 --threshold 3` returned `finalized: true`; all four participants reported `received: 4`, `expected: 4`, `threshold: 3`, and `INIT → DEAL → SHARE_EXCHANGE → VERIFY → FINALIZE`. This verifies the normal mock ceremony only; failure handling and cryptographic security remain outside M0.
 
 ## M1 — Message Semantics
 

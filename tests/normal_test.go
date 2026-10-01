@@ -13,9 +13,9 @@ import (
 )
 
 type runResult struct {
-	SessionID    string             `json:"session_id"`
+	SessionID    string            `json:"session_id"`
 	Participants []protocol.Status `json:"participants"`
-	Finalized    bool               `json:"finalized"`
+	Finalized    bool              `json:"finalized"`
 }
 
 func TestNormalCeremonyFourParticipantProcesses(t *testing.T) {
