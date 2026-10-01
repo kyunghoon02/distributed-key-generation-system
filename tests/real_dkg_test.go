@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kyunghoon02/distributed-key-generation-system/internal/agentpayment"
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/realexperiment"
 )
 
@@ -150,5 +152,54 @@ func TestRealPeerCeremony(t *testing.T) {
 	}
 	if result.Topology != "participant-to-participant" || result.FinalizedCount != 4 || result.GroupKeyAgreement != "consistent" || len(result.ParticipantResults) != 4 {
 		t.Fatalf("unexpected peer result: %+v", result)
+	}
+}
+
+func TestAgentPaymentSandboxEndToEnd(t *testing.T) {
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(t.TempDir(), "dkgctl")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/dkgctl")
+	build.Dir = root
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, output)
+	}
+	for _, args := range [][]string{{}, {"--offline-p4"}} {
+		command := exec.Command(binary, append([]string{"agent-payment-demo"}, args...)...)
+		command.Dir = root
+		output, err := command.Output()
+		if err != nil {
+			if exit, ok := err.(*exec.ExitError); ok {
+				t.Fatalf("agent-payment-demo %v: %v\n%s", args, err, exit.Stderr)
+			}
+			t.Fatal(err)
+		}
+		var result struct {
+			Mode          string                     `json:"mode"`
+			Threshold     int                        `json:"threshold"`
+			Authorization agentpayment.Authorization `json:"authorization"`
+			Receipt       agentpayment.Receipt       `json:"receipt"`
+		}
+		if err := json.Unmarshal(output, &result); err != nil {
+			t.Fatal(err)
+		}
+		message, err := result.Authorization.Request.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Mode != "sandbox_only" || result.Threshold != 3 ||
+			!ed25519.Verify(result.Authorization.GroupPublic, message, result.Authorization.Signature) ||
+			result.Receipt.Status != "simulated_paid" || result.Receipt.RequestID != result.Authorization.Request.RequestID {
+			t.Fatalf("invalid threshold authorization: %+v", result)
+		}
+	}
+	for _, args := range [][]string{{"--merchant", "forbidden.example"}, {"--amount-minor", "6000"}, {"--signer-count", "2"}, {"--tamper-after-commit"}} {
+		command := exec.Command(binary, append([]string{"agent-payment-demo"}, args...)...)
+		command.Dir = root
+		if output, err := command.Output(); err == nil {
+			t.Fatalf("policy bypass for %v: %s", args, output)
+		}
 	}
 }

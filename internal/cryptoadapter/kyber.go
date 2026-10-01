@@ -61,6 +61,7 @@ type KyberJustification struct {
 
 type KyberPublicResult struct {
 	ParticipantID string `json:"participant_id"`
+	Index         uint32 `json:"index"`
 	GroupPublic   []byte `json:"group_public"`
 	PublicShare   []byte `json:"public_share"`
 	Qualified     int    `json:"qualified"`
@@ -347,6 +348,6 @@ func (p *KyberParticipant) PublicResult() (KyberPublicResult, error) {
 	if err != nil {
 		return KyberPublicResult{}, err
 	}
-	return KyberPublicResult{ParticipantID: p.id, GroupPublic: group,
+	return KyberPublicResult{ParticipantID: p.id, Index: p.index, GroupPublic: group,
 		PublicShare: publicShare, Qualified: len(p.result.QUAL)}, nil
 }

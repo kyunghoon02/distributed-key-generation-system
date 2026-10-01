@@ -93,3 +93,18 @@ M6 verification on 2026-10-01 (Go 1.25.0, darwin/arm64): `go test ./...`, `go te
 `real-p2p-run` is a local proof of direct packet exchange. It waits for all peers in each round, retries sends within a bounded deadline, and aborts on a timeout or justification requirement. The E0–E6 experiments and `real-ceremony` still use the controller relay; direct path fault tolerance remains unverified.
 
 M7 local verification on 2026-10-01: `go test ./...`, `go test -race ./...`, `go vet ./...`, and `git diff --check` passed. The peer process integration test passed three consecutive runs; each starts four separate processes and checks four finalizations and group-key agreement. A TLS authorization test rejects controller packet/phase RPC and peer access to control RPC, and checks that the certificate identity cannot impersonate a different packet sender. One direct CLI run also finalized all four local participants with the same group public key. These checks do not establish behavior under packet loss, complaints, process crashes, or multi-host networking.
+
+## M8 — Agent Payment Authorization Sandbox
+
+- [x] Define a typed payment request, locally checked spending policy, canonical signing bytes, and sandbox receipt.
+- [x] Import each Kyber DKG secret share into FROST inside its participant process after checking all public shares against the DKG commitments.
+- [x] Produce a 3-of-4 Ed25519-verifiable authorization without reconstructing the private key in the controller.
+- [x] Reject invalid merchant, per-payment over-limit amount, changed request after commitments, and fewer than three signers in local process tests.
+- [x] Verify the authorization at an in-memory sandbox gateway and handle exact replay idempotently.
+- [ ] Make key shares, signing nonces, budget reservations, and receipts durable across process restart.
+- [ ] Separate policy-owner authority from the local controller and validate multi-host trust boundaries.
+- [ ] Integrate a sandbox payment rail and its settlement/idempotency semantics.
+
+The [use-case document](agent-payment-use-case.md) gives the data flow, trust assumptions, and evidence boundary. This milestone authorizes no real payments.
+
+M8 local verification on 2026-10-01 (Go 1.26.3, darwin/arm64): `go test ./...`, `go test -race ./...`, `go test -count=1 ./tests`, `go vet ./...`, `go mod verify`, and `git diff --check` passed. The process test builds the CLI, completes a direct 4-process DKG, verifies the resulting threshold signature with Go's standard Ed25519 verifier, checks the simulated receipt with p4 online and offline after DKG, and rejects invalid merchant, over-limit amount, two signers, and changed request contents. This is local functional evidence only.

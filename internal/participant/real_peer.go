@@ -19,7 +19,8 @@ func (s *RealServer) validatePeers(config *api.RealConfig) error {
 	if err != nil {
 		return err
 	}
-	if len(config.Identities) != 4 || config.Threshold != 3 || len(config.Peers) != 3 {
+	if len(config.Identities) != 4 || config.Threshold != 3 || len(config.Peers) != 3 ||
+		config.KeyID == "" || config.KeyVersion == 0 {
 		return errors.New("peer mode requires a 3-of-4 roster")
 	}
 	known := make(map[string]bool, 4)

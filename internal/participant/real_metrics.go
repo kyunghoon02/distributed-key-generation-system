@@ -65,7 +65,7 @@ func (m *realMetrics) handler() http.Handler {
 
 func (m *realMetrics) observeRequest(operation string, ok bool, duration time.Duration) {
 	switch operation {
-	case "real-identity", "real-configure", "real-deals", "real-accept", "real-process-deals", "real-process-responses", "real-process-justifications", "real-result", "real-timeout", "real-abort", "real-status", "real-p2p-start", "decode":
+	case "real-identity", "real-configure", "real-deals", "real-accept", "real-process-deals", "real-process-responses", "real-process-justifications", "real-result", "real-timeout", "real-abort", "real-status", "real-p2p-start", "real-sign-configure", "real-sign-commit", "real-sign-share", "decode":
 	default:
 		operation = "unknown"
 	}

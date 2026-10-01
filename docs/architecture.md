@@ -21,7 +21,7 @@ This document separates the code that runs today from the proposed end state. Cu
                                                controller decision journal
                                                (nonce hashes, status only)
 
-            real-p2p-run (local E0 path)
+       real-p2p-run / agent-payment-demo (local E0 path)
                  |
            setup / start / public result
                  |
@@ -30,6 +30,12 @@ This document separates the code that runs today from the proposed end state. Cu
           |   \    /  |       direct mutual TLS TCP + JSON packets
           |    \  /   |
           p3 <----> p4
+                 |
+        p1,p2,p3 FROST commitments + shares
+                 |
+       controller aggregates Ed25519 authorization
+                 |
+          sandbox gateway verifies + records receipt
 ```
 
 For `real-run` and `real-ceremony`, the controller launches local processes, collects their public identities, chooses delivery order, forwards packets, and collects terminal results. The final private DKG shares are not returned through the result API. The controller does see relayed protocol packets; justification packets can contain share material. `real-p2p-run` is a separate local E0 path: the controller provides identities, nonce, and peer addresses and starts each node; the nodes exchange packets directly over mutual TLS TCP connections and the controller reads public results.
@@ -70,11 +76,17 @@ The relay makes fault injection repeatable, but it is one availability dependenc
 2. Each node generates its own deal bundle, sends it directly to the other three nodes, waits for all three deals, processes them, then directly sends and receives response bundles. Peer RPC accepts only `real-accept`; the certificate identity must match the packet sender and configured roster. The controller certificate cannot invoke packet or phase RPC in peer mode.
 3. Nodes finalize locally. The controller polls status and compares only public group keys. The path currently requires all four participants and a complaint-free run; a timeout or need for justifications aborts it. It has no peer-mode crash recovery, quorum progress under participant loss, or multi-host validation.
 
-Mock and real participants expose separate bounded-label Prometheus metrics and structured JSON request logs. The real process accepts externally provided TLS files, but multi-host certificate provisioning and networking have not been validated end to end. An abrupt controller crash may leave old local child processes running. No distributed threshold signing or durable custody of completed real private shares exists yet.
+### Agent payment sandbox flow
+
+1. `agent-payment-demo` completes the direct local DKG with a key ID and version. Each signer checks every advertised public share against its DKG commitments and imports only its own secret share into FROST inside the process.
+2. The controller provisions one local payment policy. Three signers independently check the typed request's merchant, integer amount, budget, key version, and expiry, then emit one-time commitments and signature shares. A changed request after commitment is rejected.
+3. The controller verifies and aggregates the shares into one Ed25519 signature. The sandbox gateway verifies the signature and policy and records an idempotent `simulated_paid` receipt. It makes no external payment. Stopping p4 after DKG still permits p1–p3 to sign; two signers cannot sign.
+
+Mock and real participants expose separate bounded-label Prometheus metrics and structured JSON request logs. The real process accepts externally provided TLS files, but multi-host certificate provisioning and networking have not been validated end to end. An abrupt controller crash may leave old local child processes running. The sandbox has local distributed signing, but no durable custody of real private shares, signing nonce state, budget reservations, or receipts.
 
 ## Proposed final architecture
 
-The intended end state adds a usable threshold signing flow after DKG while keeping every private share within its owning participant. This is a design target, not an implemented or verified architecture.
+The intended end state turns the local signing demo into a durable, independently governed payment authorization service. This is a design target, not an implemented or verified architecture.
 
 ```mermaid
 flowchart TB
@@ -97,8 +109,8 @@ flowchart TB
 
 **DKG path:** The coordinator fixes an authenticated roster and unique session/epoch and starts the ceremony. Participants then exchange DKG packets directly with peers over authenticated channels, finalize under the selected protocol's qualification rule, and retain their private shares under a defined custody and recovery policy. The coordinator records public results and ceremony decisions; it is not on the DKG packet data path. A failed ceremony is fenced and restarted with a new nonce unless the chosen library supports a verified safe checkpoint format. The local E0 direct path demonstrates packet transport, but the complete failure and recovery behavior here remains a target. This split resembles drand's [coordinator setup and node-driven DKG](https://docs.drand.love/docs/specification/).
 
-**Signing path:** A sign request binds a key/epoch, message digest, and request ID. At least three authorized participants use their own shares to produce signing contributions. A combiner assembles and verifies one signature against the DKG group public key. Two participants cannot produce a valid signature; no component reconstructs or stores the complete private key. Replay, duplicate requests, participant loss, and timeout must have explicit terminal behavior.
+**Signing path:** The local sandbox binds a typed payment request to key ID/version and request ID, obtains three FROST signature shares, and verifies one Ed25519 signature under the DKG group key. The end state needs durable nonce and budget accounting, owner-authorized policy versions, and explicit replay, timeout, and restart behavior. The local signer process keeps each private share; the controller never reconstructs the complete private key.
 
 **Operational path:** Deploy participants on separate failure domains with authenticated communication, provision and rotate identities, protect persistent signing shares, and expose bounded metrics, structured events, and audit records. Separate operator control RPC from participant packet RPC, as drand's [DKG control-plane postmortem](https://docs.drand.love/blog/2025/03/21/drand-v2-0-postmortem/) illustrates. Signed peer packets still need delivery, replay, timeout, and consistent-broadcast rules: a P2P mesh alone does not make a broadcast reliable or prevent equivocation, a limitation noted in drand's [security model](https://docs.drand.love/docs/security-model/). The coordinator and peers need recovery rules that avoid two active attempts for one ceremony. Multi-host fault tests must back any availability claim.
 
-The signing protocol and curve remain a design decision. The current Ed25519 DKG adapter does not include a compatible distributed signing implementation. The test that reconstructs three shares in one process proves a narrow key-consistency property; it must not be used as the signing path. A future protocol/library choice must establish share compatibility, security assumptions, key storage format, and 3-of-4/2-of-4 process-level tests before this diagram can be described as implemented.
+The sandbox currently uses bytemare/frost with the Ed25519 ciphersuite. The integration checks Kyber DKG public commitments before importing each private share locally, and process tests cover three signers and two-signer rejection. The earlier test-only secret reconstruction remains separate from the signing path. Key custody, policy-owner authorization, persistent budget accounting, and a payment executor remain unresolved before this diagram can be described as implemented end to end.

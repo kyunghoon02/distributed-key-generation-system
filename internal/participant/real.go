@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bytemare/frost"
+	"github.com/kyunghoon02/distributed-key-generation-system/internal/agentpayment"
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/api"
 	"github.com/kyunghoon02/distributed-key-generation-system/internal/cryptoadapter"
 )
@@ -29,6 +31,13 @@ type RealServer struct {
 	peerStarted bool
 	peerRunning bool
 	peerError   string
+	signer      *frost.Signer
+	policy      *agentpayment.Policy
+	pending     map[string]pendingPayment
+	signed      map[string]bool
+	reserved    int64
+	keyID       string
+	keyVersion  uint64
 }
 
 func NewRealServer(id string, index uint32, logger *slog.Logger) (*RealServer, error) {
@@ -36,7 +45,8 @@ func NewRealServer(id string, index uint32, logger *slog.Logger) (*RealServer, e
 	if err != nil {
 		return nil, err
 	}
-	server := &RealServer{node: node, logger: logger}
+	server := &RealServer{node: node, logger: logger,
+		pending: make(map[string]pendingPayment), signed: make(map[string]bool)}
 	server.metrics = newRealMetrics(server)
 	return server, nil
 }
@@ -138,6 +148,7 @@ func (s *RealServer) dispatch(request api.Request) (api.Response, error) {
 		}
 		if s.peerTLS != nil {
 			s.peers = config.Peers
+			s.keyID, s.keyVersion = config.KeyID, config.KeyVersion
 		}
 		return response, nil
 	case "real-p2p-start":
@@ -147,6 +158,25 @@ func (s *RealServer) dispatch(request api.Request) (api.Response, error) {
 		s.peerStarted, s.peerRunning = true, true
 		go s.runPeerCeremony()
 		return response, nil
+	case "real-sign-configure":
+		if request.RealSignConfig == nil {
+			return response, errors.New("missing signing configuration")
+		}
+		return response, s.configureSigning(*request.RealSignConfig)
+	case "real-sign-commit":
+		if request.PaymentRequest == nil {
+			return response, errors.New("missing payment request")
+		}
+		commitment, err := s.commitPayment(*request.PaymentRequest)
+		response.SignCommitment = commitment
+		return response, err
+	case "real-sign-share":
+		if request.RealSignShare == nil {
+			return response, errors.New("missing signing share request")
+		}
+		share, err := s.signPayment(*request.RealSignShare)
+		response.SignShare = share
+		return response, err
 	case "real-deals":
 		packet, err := s.node.Deals()
 		response.RealPacket = &packet

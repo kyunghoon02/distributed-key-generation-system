@@ -42,76 +42,20 @@ func runRealPeer(args []string) error {
 		return err
 	}
 	defer stopProcesses(processes)
-	identities := make([]cryptoadapter.KyberIdentity, len(nodes))
-	for i, node := range nodes {
-		identities[i], err = node.Identity()
-		if err != nil {
-			return err
-		}
-	}
-	nonce := dkg.GetNonce()
-	for i, node := range nodes {
-		peers := make(map[string]string, len(nodes)-1)
-		for j, process := range processes {
-			if i != j {
-				peers[process.id] = process.address
-			}
-		}
-		if _, err := node.(*realTCPNode).call(api.Request{Operation: "real-configure",
-			RealConfig: &api.RealConfig{Identities: identities, Threshold: 3, Nonce: nonce, Peers: peers}}); err != nil {
-			return fmt.Errorf("configure %s: %w", processes[i].id, err)
-		}
-	}
-	for i, node := range nodes {
-		if _, err := node.(*realTCPNode).call(api.Request{Operation: "real-p2p-start"}); err != nil {
-			return fmt.Errorf("start %s: %w", processes[i].id, err)
-		}
-	}
-	deadline := time.Now().Add(35 * time.Second)
-	for {
-		finished := 0
-		for i, node := range nodes {
-			status, err := node.(*realTCPNode).call(api.Request{Operation: "real-status"})
-			if err != nil {
-				return fmt.Errorf("status %s: %w", processes[i].id, err)
-			}
-			if status.PeerError != "" {
-				return fmt.Errorf("%s peer ceremony: %s", processes[i].id, status.PeerError)
-			}
-			if !status.PeerRunning && status.RealStage == "FINALIZE" {
-				finished++
-			}
-		}
-		if finished == len(nodes) {
-			break
-		}
-		if time.Now().After(deadline) {
-			return errors.New("timed out waiting for peer ceremony")
-		}
-		time.Sleep(20 * time.Millisecond)
+	nonce, publics, err := completeLocalPeerDKG(nodes, processes, "local-dkg", 1)
+	if err != nil {
+		return err
 	}
 	hash := sha256.Sum256(nonce)
 	result := peerRunResult{Revision: buildRevision(), Topology: "participant-to-participant",
 		Transport: "mutual TLS over TCP, JSON RPC", SessionNonceSHA256: hex.EncodeToString(hash[:]),
 		Participants: len(nodes), Threshold: 3, GroupKeyAgreement: "consistent"}
-	var common []byte
-	for i, node := range nodes {
-		public, err := node.PublicResult()
-		if err != nil {
-			return err
-		}
+	for i, public := range publics {
 		groupHash := sha256.Sum256(public.GroupPublic)
 		result.ParticipantResults = append(result.ParticipantResults, realexperiment.ParticipantResult{
-			ID: processes[i].id, Phase: node.Stage(), Qualified: public.Qualified,
+			ID: processes[i].id, Phase: nodes[i].Stage(), Qualified: public.Qualified,
 			GroupKeySHA256: hex.EncodeToString(groupHash[:])})
 		result.FinalizedCount++
-		if common != nil && !bytes.Equal(common, public.GroupPublic) {
-			result.GroupKeyAgreement = "divergent"
-		}
-		common = public.GroupPublic
-	}
-	if result.GroupKeyAgreement != "consistent" {
-		return errors.New("peer participants disagree on group public key")
 	}
 	result.DurationMS = time.Since(started).Milliseconds()
 	data, err := json.MarshalIndent(result, "", "  ")
@@ -126,4 +70,71 @@ func runRealPeer(args []string) error {
 	}
 	_, err = os.Stdout.Write(data)
 	return err
+}
+
+func completeLocalPeerDKG(nodes []realexperiment.Node, processes []participantProcess, keyID string, keyVersion uint64) ([]byte, []cryptoadapter.KyberPublicResult, error) {
+	identities := make([]cryptoadapter.KyberIdentity, len(nodes))
+	for i, node := range nodes {
+		identity, err := node.Identity()
+		if err != nil {
+			return nil, nil, err
+		}
+		identities[i] = identity
+	}
+	nonce := dkg.GetNonce()
+	for i, node := range nodes {
+		peers := make(map[string]string, len(nodes)-1)
+		for j, process := range processes {
+			if i != j {
+				peers[process.id] = process.address
+			}
+		}
+		if _, err := node.(*realTCPNode).call(api.Request{Operation: "real-configure",
+			RealConfig: &api.RealConfig{Identities: identities, Threshold: 3, Nonce: nonce, Peers: peers,
+				KeyID: keyID, KeyVersion: keyVersion}}); err != nil {
+			return nil, nil, fmt.Errorf("configure %s: %w", processes[i].id, err)
+		}
+	}
+	for i, node := range nodes {
+		if _, err := node.(*realTCPNode).call(api.Request{Operation: "real-p2p-start"}); err != nil {
+			return nil, nil, fmt.Errorf("start %s: %w", processes[i].id, err)
+		}
+	}
+	deadline := time.Now().Add(35 * time.Second)
+	for {
+		finished := 0
+		for i, node := range nodes {
+			status, err := node.(*realTCPNode).call(api.Request{Operation: "real-status"})
+			if err != nil {
+				return nil, nil, fmt.Errorf("status %s: %w", processes[i].id, err)
+			}
+			if status.PeerError != "" {
+				return nil, nil, fmt.Errorf("%s peer ceremony: %s", processes[i].id, status.PeerError)
+			}
+			if !status.PeerRunning && status.RealStage == "FINALIZE" {
+				finished++
+			}
+		}
+		if finished == len(nodes) {
+			break
+		}
+		if time.Now().After(deadline) {
+			return nil, nil, errors.New("timed out waiting for peer ceremony")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	publics := make([]cryptoadapter.KyberPublicResult, len(nodes))
+	var common []byte
+	for i, node := range nodes {
+		public, err := node.PublicResult()
+		if err != nil {
+			return nil, nil, err
+		}
+		publics[i] = public
+		if common != nil && !bytes.Equal(common, public.GroupPublic) {
+			return nil, nil, errors.New("peer participants disagree on group public key")
+		}
+		common = public.GroupPublic
+	}
+	return nonce, publics, nil
 }

@@ -46,7 +46,7 @@ Safety means that an execution never accepts an invalid transition or finalizes 
 
 M0 tests the mock normal transitions. M1 tests S2 and S3 for mock SHARE messages; M2 tests mock S5 across local restart; M3 tests mock timeout and partition behavior. M5 tests signed real DKG packet deduplication, stale nonce and tampered signature rejection, three-of-four completion after one process loss, and no finalization in a 2:2 partition. Those local observations do not prove general Byzantine safety or production cryptographic security.
 
-M6 tests local mutual TLS, fresh-session supervision after a process crash, and old signed packet rejection in the fresh session. The normal `real-ceremony` command currently requires all four participants to finalize; E4's 3-of-4 completion is an experiment result, not yet the normal command's availability policy. Distributed threshold signing remains unimplemented.
+M6 tests local mutual TLS, fresh-session supervision after a process crash, and old signed packet rejection in the fresh session. The normal `real-ceremony` command currently requires all four participants to finalize; E4's 3-of-4 completion is an experiment result, not yet the normal command's availability policy. M8 adds local 3-of-4 FROST signing after a direct E0 DKG ceremony; durable signing recovery and multi-host fault behavior remain unimplemented.
 
 ## Liveness targets
 

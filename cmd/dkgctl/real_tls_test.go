@@ -115,6 +115,7 @@ func TestPeerModeSeparatesControllerAndPeerRPC(t *testing.T) {
 	}
 	_, err = controller.Call(ctx, listener.Addr().String(), api.Request{Operation: "real-configure",
 		RealConfig: &api.RealConfig{Identities: identities, Threshold: 3, Nonce: dkg.GetNonce(),
+			KeyID: "test-key", KeyVersion: 1,
 			Peers: map[string]string{"p2": "127.0.0.1:10002", "p3": "127.0.0.1:10003", "p4": "127.0.0.1:10004"}}})
 	if err != nil {
 		t.Fatal(err)
