@@ -44,7 +44,7 @@ M2 uses one append-only JSON-line WAL per participant. Accepted `begin`, SHARE, 
 
 ### Observability
 
-M4 adds structured logs, low-cardinality metrics, and JSON experiment records. Raw session IDs belong in logs, not Prometheus labels.
+M4 emits structured JSON request logs, Prometheus request and SHARE outcome counters, a request-duration histogram, and a current-phase gauge. Label values come from fixed operation/result/outcome sets; session IDs belong in logs and JSON experiment records, not Prometheus labels. The controller writes reproducible local E0–E6 result files; timing fields are controller observations rather than cryptographic phase measurements.
 
 ## M0 boundary
 

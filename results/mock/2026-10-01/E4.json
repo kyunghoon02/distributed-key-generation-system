@@ -1,0 +1,68 @@
+{
+  "experiment_id": "E4",
+  "revision": "7737678e9d43295dad67c9318dbdb0605a24031f",
+  "participant_count": 4,
+  "threshold": 3,
+  "injected_fault": "one unavailable participant",
+  "injection_point": "p4 after begin",
+  "expected_invariant": "no finalization without required shares",
+  "terminal_result": "timed_out",
+  "total_duration_ms": 331,
+  "phase_duration_ms": {
+    "initialization": 18,
+    "share_exchange": 312
+  },
+  "retry_count": 0,
+  "timeout_count": 3,
+  "duplicate_count": 0,
+  "stale_message_count": 0,
+  "dropped_count": 6,
+  "delayed_count": 0,
+  "participants": [
+    {
+      "participant_id": "p1",
+      "session_id": "experiment-E4",
+      "phase": "TIMED_OUT",
+      "received": 3,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "TIMED_OUT"
+      ]
+    },
+    {
+      "participant_id": "p2",
+      "session_id": "experiment-E4",
+      "phase": "TIMED_OUT",
+      "received": 3,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "TIMED_OUT"
+      ]
+    },
+    {
+      "participant_id": "p3",
+      "session_id": "experiment-E4",
+      "phase": "TIMED_OUT",
+      "received": 3,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "TIMED_OUT"
+      ]
+    }
+  ],
+  "unreachable": [
+    "p4"
+  ]
+}

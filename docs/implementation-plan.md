@@ -38,18 +38,22 @@ M2 verification on 2026-10-01 (Go 1.24.4, darwin/arm64): `go test ./...` and `go
 
 ## M3 — Fault Injection
 
-- [ ] Add deterministic delay, drop, duplicate, crash/restart, and partition policies.
-- [ ] Make E1–E6 repeatable from tests or an experiment runner.
-- [ ] Record terminal state and phase deadline behavior.
-- [ ] Confirm threshold-deficient partition never finalizes.
+- [x] Add deterministic delay, drop, duplicate, crash/restart, and partition policies.
+- [x] Make E1–E6 repeatable from tests or an experiment runner.
+- [x] Record terminal state and phase deadline behavior.
+- [x] Confirm threshold-deficient partition never finalizes.
+
+M3 verification on 2026-10-01: `TestDeterministicExperimentScenarios` passed for E0–E6. The local runner schedules message duplication, old-round delivery, process kill/restart, message loss, a 2:2 partition, and delayed SHARE messages. An incomplete ceremony enters durable `TIMED_OUT`; late messages cannot revive it. In E5, every participant had only 2/4 contributions and none finalized. These are mock-runtime outcomes, not a real DKG liveness claim.
 
 ## M4 — Observability and Evidence
 
-- [ ] Add structured logs.
-- [ ] Add low-cardinality Prometheus metrics.
-- [ ] Capture experiment results as JSON and human-readable output.
-- [ ] Tie each portfolio claim to a passing test or recorded experiment.
-- [ ] Put measured results in README only after execution.
+- [x] Add structured logs.
+- [x] Add low-cardinality Prometheus metrics.
+- [x] Capture experiment results as JSON and human-readable output.
+- [x] Tie each portfolio claim to a passing test or recorded experiment.
+- [x] Put measured results in README only after execution.
+
+M4 verification on 2026-10-01: `go test ./...` and `go test -race ./...` passed, including tests for the participant `/metrics` endpoint, bounded label values, structured JSON logs, and both experiment output formats. Seven JSON result files under `results/mock/2026-10-01/` were generated from code revision `7737678e9d43295dad67c9318dbdb0605a24031f` with a 300 ms SHARE deadline. Their timings are one local run each; see `docs/experiments.md` for definitions and limits.
 
 ## M5 — Real DKG Integration
 

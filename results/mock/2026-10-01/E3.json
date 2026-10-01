@@ -1,0 +1,85 @@
+{
+  "experiment_id": "E3",
+  "revision": "7737678e9d43295dad67c9318dbdb0605a24031f",
+  "participant_count": 4,
+  "threshold": 3,
+  "injected_fault": "process crash and restart",
+  "injection_point": "p1 after first peer SHARE",
+  "expected_invariant": "replay preserves state and duplicate is idempotent",
+  "terminal_result": "completed",
+  "total_duration_ms": 100,
+  "phase_duration_ms": {
+    "initialization": 17,
+    "share_exchange": 69,
+    "verify": 13
+  },
+  "retry_count": 1,
+  "timeout_count": 0,
+  "duplicate_count": 1,
+  "stale_message_count": 0,
+  "dropped_count": 0,
+  "delayed_count": 0,
+  "recovery_duration_ms": 28,
+  "participants": [
+    {
+      "participant_id": "p1",
+      "session_id": "experiment-E3",
+      "phase": "FINALIZE",
+      "received": 4,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "VERIFY",
+        "FINALIZE"
+      ]
+    },
+    {
+      "participant_id": "p2",
+      "session_id": "experiment-E3",
+      "phase": "FINALIZE",
+      "received": 4,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "VERIFY",
+        "FINALIZE"
+      ]
+    },
+    {
+      "participant_id": "p3",
+      "session_id": "experiment-E3",
+      "phase": "FINALIZE",
+      "received": 4,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "VERIFY",
+        "FINALIZE"
+      ]
+    },
+    {
+      "participant_id": "p4",
+      "session_id": "experiment-E3",
+      "phase": "FINALIZE",
+      "received": 4,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "VERIFY",
+        "FINALIZE"
+      ]
+    }
+  ]
+}

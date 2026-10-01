@@ -1,6 +1,6 @@
 # Experiment Plan
 
-Only observed test results are recorded below. Full experiment records await the required fields; do not copy expected outcomes into measured results.
+The result files below contain observations from one local mock-runtime run per scenario. Do not copy expected outcomes into measured results or treat these files as real DKG evidence.
 
 ## Required result fields
 
@@ -25,18 +25,28 @@ Record the following for every run:
 
 | ID | Scenario | Setup / fault | Expected invariant or behavior | Status |
 |---|---|---|---|---|
-| E0 | Normal run | 4 participants, threshold 3 | Completes; invalid transition count is 0 | Normal-flow test passed; measurements pending |
-| E1 | Duplicate delivery | Duplicate protocol messages | Duplicates observed; duplicate transition count is 0; ceremony remains valid | Mock SHARE semantics tested; experiment pending |
-| E2 | Stale delivery | Delay a message until the receiver advances beyond its valid state | Reject stale message; current state unchanged | Mock SHARE semantics tested; experiment pending |
-| E3 | Crash during SHARE | Persist some SHARE state, crash, restart | Replay durable state; resume same session; no re-application; record recovery duration | Local crash/restart test passed; experiment measurements pending |
-| E4 | One unavailable participant | 4 participants, threshold 3; one unavailable | Follow selected DKG protocol's actual threshold and liveness rules | Planned |
-| E5 | Threshold-deficient partition | 4 participants, threshold 3; partition A,B | C,D | Neither side finalizes while partitioned | Planned |
-| E6 | Slow participant | Inject latency into one participant or link | Phase deadline is observable; timeout does not corrupt state | Planned |
+| E0 | Normal run | 4 participants, threshold 3 | Completes; invalid transition count is 0 | [Completed](../results/mock/2026-10-01/E0.json) |
+| E1 | Duplicate delivery | Repeat p2 → p1 SHARE | Duplicate transition count is 0; ceremony remains valid | [Completed](../results/mock/2026-10-01/E1.json) |
+| E2 | Stale delivery | Deliver old-round SHARE before normal traffic | Reject stale message; current state unchanged | [Completed](../results/mock/2026-10-01/E2.json) |
+| E3 | Crash during SHARE | Persist one peer SHARE at p1, kill, restart | Replay durable state; resume same session; no re-application | [Completed](../results/mock/2026-10-01/E3.json) |
+| E4 | One unavailable participant | 4 participants, threshold 3; kill p4 after begin | Follow selected protocol's participation rules | [Timed out](../results/mock/2026-10-01/E4.json) |
+| E5 | Threshold-deficient partition | 4 participants, threshold 3; split p1,p2 from p3,p4 | Neither side finalizes while partitioned | [Timed out](../results/mock/2026-10-01/E5.json) |
+| E6 | Slow participant | Hold p4 outbound SHARE past deadline | Timeout is terminal; late SHARE cannot mutate state | [Timed out](../results/mock/2026-10-01/E6.json) |
 
 Healing the E5 partition and observing recovery is a separate optional run and must be recorded separately.
 
 ## Results log
 
-On 2026-10-01, the E0 four-process normal-flow test and CLI run completed successfully. M1 unit and local TCP tests also passed for duplicate SHARE delivery and stale round rejection. These are test results, not completed E0–E2 experiment records: fault schedules and the required timing and counter fields have not been captured yet.
+On 2026-10-01, `dkgctl experiment --scenario E0..E6 --phase-deadline 300ms` produced the linked JSON files from revision `7737678e9d43295dad67c9318dbdb0605a24031f` (Go 1.24.4, darwin/arm64). `total_duration_ms` starts before the first `begin` request and ends after terminal status collection; process startup is excluded. `phase_duration_ms` measures controller-observed initialization, SHARE delivery/deadline, and VERIFY/finalize intervals, not internal cryptographic phase timing. Counts describe runner-injected or observed events. A missing `verify` duration means the ceremony timed out before finalization.
 
-On 2026-10-01, the M2 three-process test killed a participant during `SHARE_EXCHANGE`, restarted it with its WAL, verified identical pre-crash and replayed status, rejected duplicate state application, and reached `FINALIZE` at all participants. One local run observed 22.534375 ms from restart to the first recovered status response. E3 remains incomplete as a measured experiment because the full result fields and a reusable fault schedule are not yet captured.
+| Scenario | Terminal result | Total duration | Key observation |
+|---|---|---:|---|
+| E0 | Completed | 90 ms | All four participants finalized |
+| E1 | Completed | 68 ms | One duplicate; no extra transition |
+| E2 | Completed | 71 ms | One stale old-round SHARE rejected |
+| E3 | Completed | 100 ms | Replay matched pre-crash state; recovery response in 28 ms |
+| E4 | Timed out | 331 ms | Three responsive participants received 3/4; the mock runtime requires all four |
+| E5 | Timed out | 338 ms | Each partition member received 2/4; none finalized |
+| E6 | Timed out | 340 ms | Three delayed SHAREs were rejected after timeout |
+
+These are single local observations and do not establish latency distributions, a cryptographic security property, or liveness under a selected real DKG protocol. E4 specifically reflects the current mock state machine's all-share participation rule despite `threshold=3`.

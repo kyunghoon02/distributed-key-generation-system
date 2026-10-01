@@ -44,7 +44,7 @@ Safety means that an execution never accepts an invalid transition or finalizes 
 - **S4 — Threshold gate:** finalization requires the selected protocol's configured threshold conditions.
 - **S5 — Durable replay consistency:** after M2, replay reconstructs state equivalent to the durable pre-crash state.
 
-M0 tests the transitions needed for a normal mock run. M1 tests S2 and S3 for mock SHARE messages, and M2 tests S5 across local process restart. The protocol-specific threshold and stronger cryptographic agreement properties remain targets until their corresponding implementation and tests exist. No cryptographic security is claimed before real DKG integration.
+M0 tests the transitions needed for a normal mock run. M1 tests S2 and S3 for mock SHARE messages, M2 tests S5 across local process restart, and M3 tests terminal timeout and threshold-deficient partition behavior in the mock runtime. The protocol-specific threshold and stronger cryptographic agreement properties remain targets until their corresponding implementation and tests exist. No cryptographic security is claimed before real DKG integration.
 
 ## Liveness targets
 

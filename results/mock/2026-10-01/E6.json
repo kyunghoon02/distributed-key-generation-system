@@ -1,0 +1,80 @@
+{
+  "experiment_id": "E6",
+  "revision": "7737678e9d43295dad67c9318dbdb0605a24031f",
+  "participant_count": 4,
+  "threshold": 3,
+  "injected_fault": "slow participant",
+  "injection_point": "p4 outbound SHARE past deadline",
+  "expected_invariant": "timeout is terminal and late SHARE cannot mutate state",
+  "terminal_result": "timed_out",
+  "total_duration_ms": 340,
+  "phase_duration_ms": {
+    "initialization": 18,
+    "share_exchange": 319
+  },
+  "retry_count": 0,
+  "timeout_count": 4,
+  "duplicate_count": 0,
+  "stale_message_count": 3,
+  "dropped_count": 0,
+  "delayed_count": 3,
+  "participants": [
+    {
+      "participant_id": "p1",
+      "session_id": "experiment-E6",
+      "phase": "TIMED_OUT",
+      "received": 3,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "TIMED_OUT"
+      ]
+    },
+    {
+      "participant_id": "p2",
+      "session_id": "experiment-E6",
+      "phase": "TIMED_OUT",
+      "received": 3,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "TIMED_OUT"
+      ]
+    },
+    {
+      "participant_id": "p3",
+      "session_id": "experiment-E6",
+      "phase": "TIMED_OUT",
+      "received": 3,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "TIMED_OUT"
+      ]
+    },
+    {
+      "participant_id": "p4",
+      "session_id": "experiment-E6",
+      "phase": "TIMED_OUT",
+      "received": 4,
+      "expected": 4,
+      "threshold": 3,
+      "transitions": [
+        "INIT",
+        "DEAL",
+        "SHARE_EXCHANGE",
+        "VERIFY",
+        "TIMED_OUT"
+      ]
+    }
+  ]
+}
