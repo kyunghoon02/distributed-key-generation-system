@@ -1,8 +1,11 @@
 module github.com/kyunghoon02/distributed-key-generation-system
 
-go 1.22
+go 1.25
 
-require github.com/prometheus/client_golang v1.22.0
+require (
+	github.com/drand/kyber v1.3.2
+	github.com/prometheus/client_golang v1.22.0
+)
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -11,6 +14,8 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.62.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	go.dedis.ch/fixbuf v1.0.3 // indirect
+	golang.org/x/crypto v0.46.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 )
