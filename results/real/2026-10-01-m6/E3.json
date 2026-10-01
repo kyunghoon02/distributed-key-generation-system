@@ -1,0 +1,60 @@
+{
+  "scenario": "E3",
+  "revision": "b5b7da0f41541461e5a131fe5f604ae84bb85171",
+  "crypto": "drand/kyber v1.3.2 Pedersen DKG, Ed25519",
+  "participants": 4,
+  "threshold": 3,
+  "session_nonce_sha256": "cb04e80f99b131d46a83a24c3750477d045e00c7c62e98fba77af599e82f7099",
+  "aborted_nonce_sha256": "2f3e09dd228d87892d4163a687ad71e65f5c33b5f0f725afb3a0b95e5853fc4f",
+  "fault": "p1 crashed after receiving p2 deal; old ceremony aborted; fresh ceremony completed",
+  "injection_point": "after first peer deal at p1",
+  "expected_invariant": "old packet rejected; fresh nonce and identities produce one agreed group key",
+  "terminal_result": "completed_after_abort",
+  "total_duration_ms": 143,
+  "phase_duration_ms": {
+    "deal_delivery": 10,
+    "initialization_and_deal_generation": 11,
+    "response_and_justification": 17
+  },
+  "retry_count": 1,
+  "timeout_count": 0,
+  "abort_count": 0,
+  "duplicate_count": 0,
+  "stale_rejected_count": 1,
+  "dropped_count": 0,
+  "delayed_count": 0,
+  "late_rejected_count": 0,
+  "finalized_count": 4,
+  "group_key_agreement": "consistent",
+  "recovery_mode": "fresh_session_after_abort",
+  "aborted_sessions": 1,
+  "restarted_processes": 4,
+  "fresh_run_duration_ms": 42,
+  "recovery_duration_ms": 89,
+  "participant_results": [
+    {
+      "id": "p1",
+      "phase": "FINALIZE",
+      "qualified": 4,
+      "group_key_sha256": "4a8a796e64e816d31fa1340015976caecb3c72b29111de70de30ced7484f100b"
+    },
+    {
+      "id": "p2",
+      "phase": "FINALIZE",
+      "qualified": 4,
+      "group_key_sha256": "4a8a796e64e816d31fa1340015976caecb3c72b29111de70de30ced7484f100b"
+    },
+    {
+      "id": "p3",
+      "phase": "FINALIZE",
+      "qualified": 4,
+      "group_key_sha256": "4a8a796e64e816d31fa1340015976caecb3c72b29111de70de30ced7484f100b"
+    },
+    {
+      "id": "p4",
+      "phase": "FINALIZE",
+      "qualified": 4,
+      "group_key_sha256": "4a8a796e64e816d31fa1340015976caecb3c72b29111de70de30ced7484f100b"
+    }
+  ]
+}

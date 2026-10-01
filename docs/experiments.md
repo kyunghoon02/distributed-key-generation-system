@@ -68,3 +68,19 @@ On 2026-10-01, `dkgctl real-run --scenario E0..E6` produced the linked JSON file
 Real `total_duration_ms` starts after the participant processes become ready, includes controller setup and packet handling, and excludes initial process startup. E3 includes the old-session abort and new process startup; `recovery_duration_ms` measures from p1's process kill to completion of the new ceremony, while `fresh_run_duration_ms` measures only the second ceremony. `phase_duration_ms` is controller-observed setup/deal generation, deal delivery, response/justification handling, and E6's post-terminal hold; it is not a cryptographic benchmark. E6 holds p4's outbound packets until recipients terminate and then waits the configured `--hold-duration` (100 ms by default) before late delivery. This measures the injected hold, not a network latency distribution or a DKG phase timeout. The real runner labels an execution `completed` when at least the threshold participants finalize with one group public key; it labels E5 `aborted` when the library reports insufficient valid deals. Counts describe scheduled or observed events in that single run.
 
 The mock WAL resumes the **same** session in E3. The real Kyber path cannot safely replay its in-memory private polynomial from that WAL, so real E3 aborts and starts a **new** session. The differing E4 results show the mock all-share rule and Kyber's threshold qualification rule; neither result should be generalized beyond the recorded local setup. Library choice and security assumptions are documented in [Real DKG Library Selection](dkg-library-selection.md).
+
+## M6 mutual TLS rerun
+
+On 2026-10-01, the clean binary from `b5b7da0f41541461e5a131fe5f604ae84bb85171` ran all seven four-process fault schedules again. Each real participant RPC used a fresh local mutual TLS certificate set. E3 used the normal ceremony supervisor: after p1 died, it stopped the old processes, started four new processes with new keys and nonce, rejected one old signed deal, and finalized the new ceremony. These results are one local run per case.
+
+| Scenario | Record | Result | Duration | Main observation |
+|---|---|---|---:|---|
+| E0 | [JSON](../results/real/2026-10-01-m6/E0.json) | Completed | 55 ms | Four finalized |
+| E1 | [JSON](../results/real/2026-10-01-m6/E1.json) | Completed | 45 ms | Duplicate treated idempotently; four finalized |
+| E2 | [JSON](../results/real/2026-10-01-m6/E2.json) | Completed | 42 ms | Stale deal rejected; four finalized |
+| E3 | [JSON](../results/real/2026-10-01-m6/E3.json) | Completed after abort | 143 ms | One abort, four restarted processes, old deal rejected, four finalized; 89 ms measured from crash to completion |
+| E4 | [JSON](../results/real/2026-10-01-m6/E4.json) | Completed at threshold | 43 ms | Three finalized with one group key |
+| E5 | [JSON](../results/real/2026-10-01-m6/E5.json) | Aborted | 37 ms | No participant finalized in the 2:2 split |
+| E6 | [JSON](../results/real/2026-10-01-m6/E6.json) | Completed at threshold | 392 ms | Three finalized; held packets rejected after terminal state |
+
+A separate [normal ceremony](../results/real/2026-10-01-m6/ceremony.json) finalized all four participants. Its [controller journal](../results/real/2026-10-01-m6/ceremony-journal.jsonl) records one started and one finalized decision with the same nonce hash. The ceremony's `total_duration_ms` (330 ms) includes local process startup and certificate generation, while ordinary E0–E2 and E4–E6 `real-run` durations start after process readiness. The E3 duration includes both attempts and process restarts. These timings are not comparable as a benchmark.

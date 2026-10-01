@@ -1,0 +1,54 @@
+{
+  "scenario": "E2",
+  "revision": "b5b7da0f41541461e5a131fe5f604ae84bb85171",
+  "crypto": "drand/kyber v1.3.2 Pedersen DKG, Ed25519",
+  "participants": 4,
+  "threshold": 3,
+  "session_nonce_sha256": "6792e7fa51b0939fb98e8db2a4afd7f22c71f2a0901618c24e3a28cd4d945dbc",
+  "fault": "stale p2 deal to p1",
+  "injection_point": "after deal generation",
+  "expected_invariant": "stale-session deal rejected and all four finalize",
+  "terminal_result": "completed",
+  "total_duration_ms": 42,
+  "phase_duration_ms": {
+    "deal_delivery": 9,
+    "initialization_and_deal_generation": 10,
+    "response_and_justification": 18
+  },
+  "retry_count": 0,
+  "timeout_count": 0,
+  "abort_count": 0,
+  "duplicate_count": 0,
+  "stale_rejected_count": 1,
+  "dropped_count": 0,
+  "delayed_count": 0,
+  "late_rejected_count": 0,
+  "finalized_count": 4,
+  "group_key_agreement": "consistent",
+  "participant_results": [
+    {
+      "id": "p1",
+      "phase": "FINALIZE",
+      "qualified": 4,
+      "group_key_sha256": "5d7ee17da8f72506687f6d780efd6e866ccd96807f6c686b51a0780007804383"
+    },
+    {
+      "id": "p2",
+      "phase": "FINALIZE",
+      "qualified": 4,
+      "group_key_sha256": "5d7ee17da8f72506687f6d780efd6e866ccd96807f6c686b51a0780007804383"
+    },
+    {
+      "id": "p3",
+      "phase": "FINALIZE",
+      "qualified": 4,
+      "group_key_sha256": "5d7ee17da8f72506687f6d780efd6e866ccd96807f6c686b51a0780007804383"
+    },
+    {
+      "id": "p4",
+      "phase": "FINALIZE",
+      "qualified": 4,
+      "group_key_sha256": "5d7ee17da8f72506687f6d780efd6e866ccd96807f6c686b51a0780007804383"
+    }
+  ]
+}
