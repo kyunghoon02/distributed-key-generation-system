@@ -1,0 +1,55 @@
+{
+  "scenario": "E6",
+  "revision": "f5e38932c9d40a116422d399c3570c462df917bb",
+  "crypto": "drand/kyber v1.3.2 Pedersen DKG, Ed25519",
+  "participants": 4,
+  "threshold": 3,
+  "session_nonce_sha256": "3ef14632c50e6c53b25559672c4d1e711418bf1f7cdc9fbed224c6de6a1aacbd",
+  "fault": "p4 deals held until recipients terminate, then held again before late delivery",
+  "injection_point": "after deal generation",
+  "expected_invariant": "late deal rejected after terminal state; three participants agree",
+  "terminal_result": "completed",
+  "total_duration_ms": 121,
+  "phase_duration_ms": {
+    "deal_delivery": 2,
+    "held_after_terminal": 102,
+    "initialization_and_deal_generation": 4,
+    "response_and_justification": 9
+  },
+  "retry_count": 0,
+  "timeout_count": 0,
+  "abort_count": 1,
+  "duplicate_count": 0,
+  "stale_rejected_count": 0,
+  "dropped_count": 6,
+  "delayed_count": 3,
+  "hold_duration_ms": 102,
+  "late_rejected_count": 3,
+  "finalized_count": 3,
+  "group_key_agreement": "consistent",
+  "participant_results": [
+    {
+      "id": "p1",
+      "phase": "FINALIZE",
+      "qualified": 3,
+      "group_key_sha256": "c3d4a77eb487c19ca293ddf5711efbeac70195260c2c22858e441c9bb7f0ae53"
+    },
+    {
+      "id": "p2",
+      "phase": "FINALIZE",
+      "qualified": 3,
+      "group_key_sha256": "c3d4a77eb487c19ca293ddf5711efbeac70195260c2c22858e441c9bb7f0ae53"
+    },
+    {
+      "id": "p3",
+      "phase": "FINALIZE",
+      "qualified": 3,
+      "group_key_sha256": "c3d4a77eb487c19ca293ddf5711efbeac70195260c2c22858e441c9bb7f0ae53"
+    },
+    {
+      "id": "p4",
+      "phase": "ABORTED",
+      "error": "participant request failed: our node is evicted from list of qualified participants"
+    }
+  ]
+}

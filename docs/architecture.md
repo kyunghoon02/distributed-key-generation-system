@@ -4,14 +4,17 @@
 
 The runtime coordinates a fixed participant set through a DKG ceremony while preserving protocol state across unreliable message delivery and process failures. The architecture separates distributed runtime concerns from cryptographic operations.
 
-## Target components
+## Components
 
 ```text
 dkgctl → participant processes → transport → fault injection
 
-participant:
-network transport → message validation → protocol state machine
-                 → crypto adapter → durable state → metrics
+mock participant:
+TCP → message validation → explicit state machine → mock adapter → WAL → metrics
+
+real participant:
+loopback TCP → session and signature validation → Kyber DKG adapter
+                                              → in-memory secret state
 ```
 
 ### Controller (`dkgctl`)
@@ -20,31 +23,31 @@ Creates or drives a ceremony, starts/contacts participant processes, and collect
 
 ### Participant process
 
-Owns one participant identity and its ceremony state. Each participant advances through explicit phases rather than running the ceremony as one opaque function.
+Owns one participant identity and its ceremony state. The mock path advances through its explicit state machine; the real path drives Kyber's deal, response, and justification rounds in a separate participant process. The real controller sees signed packets and public results, not private shares.
 
 ### Transport
 
-Provides message delivery between participant processes. Its interface is independent of the protocol and will be wrapped by deterministic fault policies in M3.
+Provides local TCP request and packet delivery. The controller applies deterministic fault schedules before forwarding packets. Real participant listeners accept loopback addresses only; the RPC channel does not authenticate clients.
 
 ### Message validation
 
-Checks the ceremony/session, epoch, round, phase, sender, recipient, and logical message identity before protocol state is mutated. Validation and deduplication are introduced in M1.
+The mock path checks session, epoch, round, phase, sender, recipient, and logical message identity. The real adapter checks a fresh session nonce, fixed sender/index mapping, signed packet, and duplicate identity before passing the packet to Kyber.
 
 ### Protocol state machine
 
-Initial phases are `INIT → DEAL → SHARE_EXCHANGE → VERIFY → FINALIZE`, with `COMPLAINT` / `CONFIRM` added when the selected protocol requires them. Transitions are monotonic and testable.
+Mock phases are `INIT → DEAL → SHARE_EXCHANGE → VERIFY → FINALIZE` or terminal `TIMED_OUT`. The real adapter progresses through `INIT → DEAL → COLLECT_DEALS → COLLECT_RESPONSES → COLLECT_JUSTIFICATIONS → FINALIZE` or terminal `ABORTED`/`TIMED_OUT`. The Kyber library decides qualification and uses signed responses and justifications when needed.
 
 ### Crypto adapter
 
-Defines the boundary for protocol-specific cryptographic work. Early milestones use deterministic mock behavior. The mock is not a cryptographic implementation. M5 selects a maintained, reviewed Go-compatible library only after documenting protocol, maintenance, usage, assumptions, and license.
+The mock adapter produces deterministic test contributions. The [Kyber adapter](../internal/cryptoadapter/kyber.go) uses drand/kyber `v1.3.2` for real Pedersen DKG payloads. The two adapters have different round interfaces because one mock SHARE cannot represent a real multi-round protocol. Selection evidence is in [the library decision](dkg-library-selection.md).
 
 ### Durable state
 
-M2 uses one append-only JSON-line WAL per participant. Accepted `begin`, SHARE, and `finalize` events are synced before the participant acknowledges them. A restarted process replays the same file before serving requests; replay restores applied message IDs as well as protocol state. An incomplete trailing record is discarded, while a malformed complete record blocks startup. The state file assumes one active writer and storage that survives process restart; node loss and automated process restart are outside M2.
+The mock M2 path uses one append-only JSON-line WAL per participant. Accepted `begin`, SHARE, and `finalize` events are synced before acknowledgement. A restarted mock process replays the same file before serving requests; replay restores applied message IDs and protocol state. The real Kyber engine retains random polynomial state in memory and has no safe same-session WAL replay. Real E3 aborts the old session and restarts all participants with fresh identities and nonce.
 
 ### Observability
 
-M4 emits structured JSON request logs, Prometheus request and SHARE outcome counters, a request-duration histogram, and a current-phase gauge. Label values come from fixed operation/result/outcome sets; session IDs belong in logs and JSON experiment records, not Prometheus labels. The controller writes reproducible local E0–E6 result files; timing fields are controller observations rather than cryptographic phase measurements.
+The mock path emits structured JSON request logs, Prometheus request and SHARE outcome counters, a request-duration histogram, and a current-phase gauge. The real path emits JSON request logs without packet payloads; it does not yet expose Prometheus metrics. Both controllers write E0–E6 JSON result files. Timing fields are controller observations, not cryptographic phase benchmarks.
 
 ## M0 boundary
 

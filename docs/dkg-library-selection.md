@@ -1,0 +1,20 @@
+# Real DKG Library Selection
+
+Research snapshot: 2026-10-01. This is an integration choice, not a security audit.
+
+| Candidate | Protocol and current source evidence | Maintenance / usage | License and Go floor | Decision |
+|---|---|---|---|---|
+| [drand/kyber `v1.3.2`](https://pkg.go.dev/github.com/drand/kyber/share/dkg?tab=versions) | [Pedersen DKG](https://github.com/drand/drand-docs/blob/master/docs/concepts/01-Cryptography.md), with signed deal/response/justification packets and encrypted deal shares in its [DKG package](https://pkg.go.dev/github.com/drand/kyber/share/dkg) | [drand's current module](https://github.com/drand/drand/blob/master/go.mod) uses the fork; the [drand project](https://github.com/drand/drand) runs a distributed randomness beacon | [MPL-2.0](https://github.com/drand/kyber/blob/master/LICENSE); [`go 1.25`](https://github.com/drand/kyber/blob/v1.3.2/go.mod) | Selected for direct drand usage and a round API that exposes protocol packets |
+| [dedis/kyber `v4.0.2`](https://pkg.go.dev/go.dedis.ch/kyber/v4/share/dkg/pedersen) | Pedersen DKG with deal, response, and justification rounds | Maintained upstream; drand's current module still pins its fork in the cited snapshot | [MPL-2.0](https://github.com/dedis/kyber/blob/master/LICENSE); [`go 1.25`](https://github.com/dedis/kyber/blob/v4.0.2/go.mod) | Reasonable alternative; not used in this prototype |
+| [bytemare/dkg](https://github.com/bytemare/dkg) | Two-round Pedersen DKG with zero-knowledge proofs, aimed at FROST | Active source; no deployment using this package was confirmed in this research | [MIT](https://github.com/bytemare/dkg/blob/main/LICENSE); [main currently requires Go 1.26.3](https://github.com/bytemare/dkg/blob/main/go.mod) | Not selected because its deployment evidence and Go requirement fit this project less well |
+
+The selected adapter uses drand/kyber `v1.3.2` with the Ed25519 suite, a 4-member roster, threshold 3, a fresh 32-byte nonce per ceremony, Schnorr packet signatures, ECIES-encrypted deal shares, and FastSync responses. [`KyberParticipant`](../internal/cryptoadapter/kyber.go) checks the session nonce, sender/index binding, packet signature, and duplicate identity before passing a packet to the library. The final public share is checked against the library's commitments; the controller only receives public results and a hash of the group public key.
+
+## Assumptions and limits
+
+- The controller supplies the same trusted, fixed roster and public identity keys to every participant. This prototype does not establish that roster through PKI or another authenticated membership service.
+- `real-run` binds participant TCP listeners to loopback. Deal shares are encrypted and packets are signed by the library, but the local RPC channel has no TLS or client authentication. This is a local experiment harness, not a remote deployment endpoint.
+- Secret identity keys, polynomial state, and final private shares live in each participant process memory. They are not exported in JSON results or request logs. Key custody, secure storage, memory erasure, and operational rotation are not implemented.
+- The mock JSON-line WAL cannot reconstruct the library's internal random polynomial and protocol state. Real E3 aborts the old ceremony and starts a **new** one with new participant processes, identities, and nonce. Same-session real DKG resume is not implemented.
+- Fault schedules are deterministic, but cryptographic randomness and wall-clock durations are not. The experiment results are one local observation each, not a performance distribution or proof of Byzantine security.
+- No independent audit of this integration or cryptographic security claim has been established. The library's [source and API](https://github.com/drand/kyber/tree/v1.3.2/share/dkg) define the protocol behavior used here.

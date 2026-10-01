@@ -1,6 +1,6 @@
 # Experiment Plan
 
-The result files below contain observations from one local mock-runtime run per scenario. Do not copy expected outcomes into measured results or treat these files as real DKG evidence.
+The result files contain one local run per scenario for each implementation. Mock and real DKG records have different recovery and threshold behavior; compare them by scenario, not as identical protocol executions.
 
 ## Required result fields
 
@@ -49,4 +49,22 @@ On 2026-10-01, `dkgctl experiment --scenario E0..E6 --phase-deadline 300ms` prod
 | E5 | Timed out | 338 ms | Each partition member received 2/4; none finalized |
 | E6 | Timed out | 340 ms | Three delayed SHAREs were rejected after timeout |
 
-These are single local observations and do not establish latency distributions, a cryptographic security property, or liveness under a selected real DKG protocol. E4 specifically reflects the current mock state machine's all-share participation rule despite `threshold=3`.
+These are single local observations and do not establish latency distributions or a cryptographic security property. Mock E4 specifically reflects the mock state machine's all-share participation rule despite `threshold=3`.
+
+## Real DKG process results
+
+On 2026-10-01, `dkgctl real-run --scenario E0..E6` produced the linked JSON files from revision `f5e38932c9d40a116422d399c3570c462df917bb` (Go 1.25.0, darwin/arm64). Each run started four separate loopback TCP participant processes using drand/kyber `v1.3.2`, Ed25519, threshold 3, and fresh cryptographic randomness. The controller forwarded signed deal, response, and justification packets as needed. `group_key_agreement=consistent` means every finalized participant in that run returned the same group public key hash; `not_observed` means nobody finalized.
+
+| Scenario | Record | Terminal result | Total duration | Observation |
+|---|---|---|---:|---|
+| E0 | [JSON](../results/real/2026-10-01/E0.json) | Completed | 24 ms | Four finalized; same group public key |
+| E1 | [JSON](../results/real/2026-10-01/E1.json) | Completed | 19 ms | Duplicate p2 deal to p1 was idempotent; four finalized |
+| E2 | [JSON](../results/real/2026-10-01/E2.json) | Completed | 17 ms | Stale-session deal rejected; four finalized |
+| E3 | [JSON](../results/real/2026-10-01/E3.json) | Completed after abort | 49 ms | p1 killed after one peer deal; old ceremony aborted; four new processes finalized under a fresh nonce (44 ms from crash) |
+| E4 | [JSON](../results/real/2026-10-01/E4.json) | Completed at threshold | 15 ms | p4 killed after deal generation; p1–p3 finalized with the same 3-member qualified set |
+| E5 | [JSON](../results/real/2026-10-01/E5.json) | Aborted | 13 ms | 2:2 partition; library reported fewer than 3 valid deals at all four nodes |
+| E6 | [JSON](../results/real/2026-10-01/E6.json) | Completed at threshold | 121 ms | p4 outbound deals held; p1–p3 finalized; three deliveries rejected after a 102 ms hold |
+
+Real `total_duration_ms` starts after the participant processes become ready, includes controller setup and packet handling, and excludes initial process startup. E3 includes the old-session abort and new process startup; `recovery_duration_ms` measures from p1's process kill to completion of the new ceremony, while `fresh_run_duration_ms` measures only the second ceremony. `phase_duration_ms` is controller-observed setup/deal generation, deal delivery, response/justification handling, and E6's post-terminal hold; it is not a cryptographic benchmark. E6 holds p4's outbound packets until recipients terminate and then waits the configured `--hold-duration` (100 ms by default) before late delivery. This measures the injected hold, not a network latency distribution or a DKG phase timeout. The real runner labels an execution `completed` when at least the threshold participants finalize with one group public key; it labels E5 `aborted` when the library reports insufficient valid deals. Counts describe scheduled or observed events in that single run.
+
+The mock WAL resumes the **same** session in E3. The real Kyber path cannot safely replay its in-memory private polynomial from that WAL, so real E3 aborts and starts a **new** session. The differing E4 results show the mock all-share rule and Kyber's threshold qualification rule; neither result should be generalized beyond the recorded local setup. Library choice and security assumptions are documented in [Real DKG Library Selection](dkg-library-selection.md).

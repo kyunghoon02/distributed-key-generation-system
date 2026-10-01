@@ -1,0 +1,50 @@
+{
+  "scenario": "E5",
+  "revision": "f5e38932c9d40a116422d399c3570c462df917bb",
+  "crypto": "drand/kyber v1.3.2 Pedersen DKG, Ed25519",
+  "participants": 4,
+  "threshold": 3,
+  "session_nonce_sha256": "2e80d56009b94b3616822015b6ecca3b5d8dae2cdefe7b85f5c5672df23f57f8",
+  "fault": "p1,p2 isolated from p3,p4",
+  "injection_point": "after deal generation",
+  "expected_invariant": "neither two-node partition finalizes at threshold three",
+  "terminal_result": "aborted",
+  "total_duration_ms": 13,
+  "phase_duration_ms": {
+    "deal_delivery": 1,
+    "initialization_and_deal_generation": 4,
+    "response_and_justification": 7
+  },
+  "retry_count": 0,
+  "timeout_count": 0,
+  "abort_count": 4,
+  "duplicate_count": 0,
+  "stale_rejected_count": 0,
+  "dropped_count": 24,
+  "delayed_count": 0,
+  "late_rejected_count": 0,
+  "finalized_count": 0,
+  "group_key_agreement": "not_observed",
+  "participant_results": [
+    {
+      "id": "p1",
+      "phase": "ABORTED",
+      "error": "participant request failed: process-justifications: only 2/3 valid deals - dkg abort"
+    },
+    {
+      "id": "p2",
+      "phase": "ABORTED",
+      "error": "participant request failed: process-justifications: only 2/3 valid deals - dkg abort"
+    },
+    {
+      "id": "p3",
+      "phase": "ABORTED",
+      "error": "participant request failed: process-justifications: only 2/3 valid deals - dkg abort"
+    },
+    {
+      "id": "p4",
+      "phase": "ABORTED",
+      "error": "participant request failed: process-justifications: only 2/3 valid deals - dkg abort"
+    }
+  ]
+}
